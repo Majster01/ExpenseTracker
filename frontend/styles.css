@@ -22,10 +22,13 @@ h1 { max-width: 650px; font-size: clamp(2.35rem, 7vw, 4.8rem); line-height: .98;
 .lede { max-width: 530px; margin: 22px 0 0; color: var(--muted); line-height: 1.6; font-size: 16px; }
 .workspace { display: grid; grid-template-columns: .88fr 1.12fr; gap: 18px; align-items: start; }
 .panel { padding: 27px; background: rgba(255, 253, 248, .88); border: 1px solid rgba(217, 226, 236, .9); border-radius: 8px; box-shadow: var(--shadow); }
+.auth-panel { padding: 20px; }
+.auth-panel[hidden] { display: none; }
 .panel-heading { justify-content: space-between; align-items: flex-start; margin-bottom: 25px; }
 h2 { font-size: 22px; }
 .muted, .form-message { color: var(--muted); line-height: 1.5; }
-.muted { margin: 12px 0 24px; font-size: 13px; }
+.auth-panel h2 { font-size: 19px; }
+.muted { margin: 9px 0 16px; font-size: 13px; }
 .google-button { min-height: 40px; }
 .form-message { min-height: 22px; margin: 12px 0 0; font-size: 13px; }
 .form-message.error { color: var(--coral); }

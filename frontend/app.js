@@ -70,7 +70,7 @@
     const signedIn = Boolean(token);
     userStatus.textContent = signedIn ? 'Signed in with Google' : 'Not signed in';
     userStatus.classList.toggle('signed-in', signedIn);
-    authPanel.classList.toggle('authenticated', signedIn);
+    authPanel.hidden = signedIn;
     signOutButton.hidden = !signedIn;
     updateButton();
   };
@@ -111,13 +111,17 @@
   const restoreAuthentication = async () => {
     try {
       const storedToken = await readStoredToken();
-      if (!storedToken) return;
+      if (!storedToken) {
+        setAuthenticatedState(null);
+        return;
+      }
       if (tokenIsUsable(storedToken)) {
         setAuthenticatedState(storedToken);
       } else {
         await clearAuthentication();
       }
     } catch {
+      setAuthenticatedState(null);
       setMessage(authMessage, 'Sign in to continue.', false);
     }
   };
