@@ -10,64 +10,12 @@
   const signOutButton = document.querySelector('#sign-out-button');
   const resultPanel = document.querySelector('#result-panel');
   const authPanel = document.querySelector('#auth-panel');
-  const tokenState = { value: null };
-  const AUTH_DB_NAME = 'expense-tracker-auth';
-  const AUTH_STORE_NAME = 'credentials';
-  const AUTH_KEY = 'google-id-token';
-
-  const openAuthDatabase = () => new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(AUTH_DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(AUTH_STORE_NAME);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-
-  const readStoredToken = async () => {
-    const database = await openAuthDatabase();
-    return new Promise((resolve, reject) => {
-      const request = database.transaction(AUTH_STORE_NAME, 'readonly')
-        .objectStore(AUTH_STORE_NAME)
-        .get(AUTH_KEY);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    }).finally(() => database.close());
-  };
-
-  const storeToken = async (token) => {
-    const database = await openAuthDatabase();
-    return new Promise((resolve, reject) => {
-      const request = database.transaction(AUTH_STORE_NAME, 'readwrite')
-        .objectStore(AUTH_STORE_NAME)
-        .put(token, AUTH_KEY);
-      request.onsuccess = resolve;
-      request.onerror = () => reject(request.error);
-    }).finally(() => database.close());
-  };
-
-  const removeStoredToken = async () => {
-    const database = await openAuthDatabase();
-    return new Promise((resolve, reject) => {
-      const request = database.transaction(AUTH_STORE_NAME, 'readwrite')
-        .objectStore(AUTH_STORE_NAME)
-        .delete(AUTH_KEY);
-      request.onsuccess = resolve;
-      request.onerror = () => reject(request.error);
-    }).finally(() => database.close());
-  };
-
-  const tokenIsUsable = (token) => {
-    try {
-      const payloadSegment = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(window.atob(payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, '=')));
-      return typeof payload.exp === 'number' && payload.exp * 1000 > Date.now();
-    } catch {
-      return false;
-    }
-  };
+  const tokenState = { value: null, expiresAt: 0 };
+  let tokenClient = null;
 
   const setAuthenticatedState = (token) => {
     tokenState.value = token;
-    const signedIn = Boolean(token);
+    const signedIn = Boolean(token && tokenState.expiresAt > Date.now());
     userStatus.textContent = signedIn ? 'Signed in with Google' : 'Not signed in';
     userStatus.classList.toggle('signed-in', signedIn);
     authPanel.hidden = signedIn;
@@ -77,11 +25,8 @@
 
   const clearAuthentication = async (message = '') => {
     setAuthenticatedState(null);
+    tokenState.expiresAt = 0;
     setMessage(authMessage, message, Boolean(message));
-    try {
-      await removeStoredToken();
-    } catch {
-    }
   };
 
   const setMessage = (element, message, error = false) => {
@@ -100,31 +45,24 @@
     updateButton();
   });
 
-  window.handleGoogleCredential = (response) => {
-    setAuthenticatedState(response.credential);
-    storeToken(response.credential).catch(() => {
-      setMessage(authMessage, 'Signed in, but this browser could not save the session.', true);
-    });
-    setMessage(authMessage, '');
-  };
-
-  const restoreAuthentication = async () => {
-    try {
-      const storedToken = await readStoredToken();
-      if (!storedToken) {
-        setAuthenticatedState(null);
+  const requestAccessToken = (prompt = '') => new Promise((resolve, reject) => {
+    if (!tokenClient) {
+      reject(new Error('Google sign-in is not ready.'));
+      return;
+    }
+    tokenClient.callback = (response) => {
+      if (response.error) {
+        reject(new Error('Google sign-in was not completed.'));
         return;
       }
-      if (tokenIsUsable(storedToken)) {
-        setAuthenticatedState(storedToken);
-      } else {
-        await clearAuthentication();
-      }
-    } catch {
-      setAuthenticatedState(null);
-      setMessage(authMessage, 'Sign in to continue.', false);
-    }
-  };
+      tokenState.value = response.access_token;
+      tokenState.expiresAt = Date.now() + (response.expires_in * 1000);
+      setAuthenticatedState(response.access_token);
+      setMessage(authMessage, '');
+      resolve(response.access_token);
+    };
+    tokenClient.requestAccessToken({ prompt });
+  });
 
   const initializeGoogle = () => {
     if (!config.googleClientId) {
@@ -132,17 +70,33 @@
       updateButton();
       return;
     }
-    if (!window.google?.accounts?.id) {
+    if (!window.google?.accounts?.oauth2) {
       window.setTimeout(initializeGoogle, 100);
       return;
     }
-    window.google.accounts.id.initialize({ client_id: config.googleClientId, callback: window.handleGoogleCredential });
-    window.google.accounts.id.renderButton(document.querySelector('#google-signin'), { theme: 'outline', size: 'large', width: 280 });
+    tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: config.googleClientId,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      callback: () => {},
+    });
+    const signInButton = document.createElement('button');
+    signInButton.className = 'google-button';
+    signInButton.type = 'button';
+    signInButton.textContent = 'Sign in with Google';
+    signInButton.addEventListener('click', () => {
+      requestAccessToken('consent').catch((error) => setMessage(authMessage, error.message, true));
+    });
+    document.querySelector('#google-signin').replaceChildren(signInButton);
   };
   initializeGoogle();
-  restoreAuthentication();
+  setAuthenticatedState(null);
 
-  signOutButton.addEventListener('click', () => clearAuthentication());
+  signOutButton.addEventListener('click', async () => {
+    if (tokenState.value && window.google?.accounts?.oauth2) {
+      window.google.accounts.oauth2.revoke(tokenState.value, () => {});
+    }
+    await clearAuthentication();
+  });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -162,6 +116,9 @@
     body.append('parser_type', document.querySelector('#parser-type').value);
     body.append('file', file);
     try {
+      if (!tokenState.value || tokenState.expiresAt <= Date.now() + 5000) {
+        await requestAccessToken('');
+      }
       const headers = tokenState.value ? { Authorization: `Bearer ${tokenState.value}` } : {};
       const response = await fetch(`${config.apiBaseUrl}/statements`, { method: 'POST', headers, body });
       const payload = await response.json().catch(() => ({}));

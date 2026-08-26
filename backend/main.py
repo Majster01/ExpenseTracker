@@ -1,21 +1,24 @@
-"""Unauthenticated HTTP API for uploading bank statements.
+"""HTTP API for uploading bank statements with Google Sheets authorization.
 
 Run locally with:
     uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
-This service is intended for a private or trusted network. It has no login
-endpoint or application-level authentication.
+When configured with a Google client ID, uploads require caller OAuth access
+to the working spreadsheet.
 """
+from __future__ import annotations
+
 import json
 import logging
 import os
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import google.auth
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token
+from googleapiclient.errors import HttpError
+from google.oauth2 import credentials as user_credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -46,7 +49,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-def _sheets_service():
+def _service_account_sheets_service():
     credentials_path = os.getenv("SERVICE_ACCOUNT_FILE")
     if credentials_path:
         log.info("Loading Sheets credentials from configured file path")
@@ -71,27 +74,46 @@ def _sheets_service():
     return build("sheets", "v4", credentials=credentials)
 
 
-def _require_google_user(authorization: str | None):
+def _require_google_user(authorization: Optional[str]):
     if not GOOGLE_CLIENT_ID:
-        return None
+        return _service_account_sheets_service()
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Google sign-in is required")
+    access_token = authorization[7:].strip()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Google sign-in is required")
+
+    credentials = user_credentials.Credentials(
+        token=access_token,
+        scopes=SCOPES,
+    )
+    sheets_service = build("sheets", "v4", credentials=credentials)
     try:
-        return id_token.verify_oauth2_token(
-            authorization[7:], google_requests.Request(), audience=GOOGLE_CLIENT_ID
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=401, detail="Invalid Google sign-in token") from error
+        sheets_service.spreadsheets().get(
+            spreadsheetId=processor.SPREADSHEET_ID,
+            fields="spreadsheetId",
+        ).execute()
+    except HttpError as error:
+        if error.resp.status == 401:
+            raise HTTPException(status_code=401, detail="Invalid or expired Google sign-in") from error
+        if error.resp.status == 403:
+            raise HTTPException(
+                status_code=403,
+                detail="Your Google account does not have access to the working spreadsheet",
+            ) from error
+        raise HTTPException(status_code=502, detail="Could not validate Google Sheets access") from error
+    log.info("Validated caller access to spreadsheet client_id=%s", GOOGLE_CLIENT_ID)
+    return sheets_service
 
 
 @app.post("/statements")
 async def upload_statement(
     file: UploadFile = File(...),
     parser_type: str = Form(...),
-    authorization: str | None = Header(default=None),
+    authorization: Optional[str] = Header(default=None),
 ):
     request_id = str(uuid4())
-    _require_google_user(authorization)
+    sheets_service = _require_google_user(authorization)
     filename = file.filename or ""
     log.info(
         "Statement upload started request_id=%s parser_type=%s filename=%s",
@@ -121,7 +143,7 @@ async def upload_statement(
         result = processor.process_and_track_statement(
             parser_type,
             pdf_bytes,
-            _sheets_service(),
+            sheets_service,
         )
         log.info(
             "Statement upload completed request_id=%s rows_added=%s duplicates_removed=%s",

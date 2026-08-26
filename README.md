@@ -19,9 +19,7 @@ curl -F 'parser_type=nlb' -F 'file=@/path/to/statement.pdf' \
 
 The endpoint parses the uploaded PDF in memory and sends rows directly to Google
 Sheets. The response contains the parser type, statement ID, parsed row counts,
-categorization counts, rows added, and duplicate rows removed. The endpoint has no `/login` route and no
-application-level authentication. Run it only on a private or trusted
-network; do not expose it directly to the public internet.
+categorization counts, rows added, and duplicate rows removed.
 
 The backend also exposes a simple in-memory expense API:
 
@@ -32,9 +30,16 @@ curl -X POST http://127.0.0.1:8000/expenses \
   -d '{"title":"Groceries","amount":42.50,"category":"Food","date":"2026-08-26"}'
 ```
 
-The service account is loaded by the backend and is never accepted from the
-mobile client. Set `SERVICE_ACCOUNT_FILE` to use a different credential path
-and `MAX_UPLOAD_BYTES` to change the 10 MiB upload limit.
+When `GOOGLE_CLIENT_ID` is configured, the frontend requests a Google OAuth
+access token with the `https://www.googleapis.com/auth/spreadsheets` scope and
+sends it to the backend. The backend validates that token by reading the
+working spreadsheet, so the caller's Google account must have access to that
+spreadsheet. Set `MAX_UPLOAD_BYTES` to change the 10 MiB upload limit.
+
+For local development without `GOOGLE_CLIENT_ID`, the backend uses a service
+account from `SERVICE_ACCOUNT_FILE` or Application Default Credentials. This
+fallback is intended for local/trusted use only; authenticated deployments use
+the caller's Google credentials for all Sheets operations.
 
 Uploaded PDFs are not written to disk by the endpoint. Google Sheets
 deduplication prevents duplicate rows when a statement is uploaded again.
@@ -51,11 +56,10 @@ Before deploying, rotate the key represented by `service_account.json`: it has
 been committed to Git history. Remove the file from the repository and remote
 history after rotation. Do not put it in the container or Cloud Build settings.
 
-The recommended production setup is a dedicated Cloud Run runtime service
-account. Grant it access to the Sheets API and share the target spreadsheet
-with its email address. When `SERVICE_ACCOUNT_FILE` is unset, the API uses
-Google Application Default Credentials, which is the mode used on Cloud Run.
-For local development, set `SERVICE_ACCOUNT_FILE` to a local JSON key path.
+For unauthenticated local development, set `SERVICE_ACCOUNT_FILE` to a local
+JSON key path or use Application Default Credentials. Authenticated Cloud Run
+deployments use the caller's OAuth credentials and require each caller to have
+access to the target spreadsheet.
 
 Enable these APIs in the Google Cloud project:
 
@@ -79,10 +83,10 @@ trigger for the deployment branch using `cloudbuild.yaml`. Set `_REGION`,
 match your project. Grant the Cloud Build service account permission to push
 to Artifact Registry and deploy Cloud Run services.
 
-The supplied Cloud Build configuration allows unauthenticated access for
-initial testing. This API has no application-level authentication, so do not
-use that setting for production. Remove `--allow-unauthenticated` and grant
-Cloud Run Invoker only to the intended caller before exposing personal data.
+The supplied Cloud Build configuration allows unauthenticated network access
+to Cloud Run while the application enforces Google OAuth when
+`GOOGLE_CLIENT_ID` is configured. Keep `ALLOWED_ORIGINS` restricted to the
+actual frontend origin before exposing personal data.
 
 The `/expenses` endpoints remain in-memory and can reset when Cloud Run
 restarts or scales. Statement imports are persisted in Google Sheets.
@@ -111,18 +115,19 @@ Actions** as the source. The workflow in `.github/workflows/pages.yml` deploys
 the `frontend/` directory on pushes to `main`.
 
 Create a Google OAuth Web client and add the final GitHub Pages origin to its
-authorized JavaScript origins. Set the same client ID in `frontend/config.js`
-and the Cloud Run `_GOOGLE_CLIENT_ID` substitution in `cloudbuild.yaml`. Set
+authorized JavaScript origins. Configure the OAuth consent screen and enable
+the Google Sheets API. Set the same client ID in `frontend/config.js` and the
+Cloud Run `_GOOGLE_CLIENT_ID` substitution in `cloudbuild.yaml`. Set
 `_ALLOWED_ORIGINS` to the exact Pages origin, for example
 `https://your-user.github.io/your-repository`.
 
-When `GOOGLE_CLIENT_ID` is configured, the API requires a valid Google ID token
-in the upload request. CORS is restricted to `ALLOWED_ORIGINS`; do not use `*`.
+When `GOOGLE_CLIENT_ID` is configured, the API requires a valid Google OAuth
+access token in the upload request. CORS is restricted to `ALLOWED_ORIGINS`; do
+not use `*`. The account must be able to access the configured working sheet.
 The app currently supports PDF uploads with the `nlb` and `otp` parsers. CSV
 uploads are intentionally deferred.
 
-The frontend persists the Google ID token in IndexedDB so sign-in survives page
-reloads and browser restarts. Expired or rejected tokens are removed, and the
-Sign out control clears the stored session. Clearing site data also signs the
-user out. The token remains accessible to same-origin JavaScript, so only load
+Google access tokens are short-lived and kept in browser memory only. A page
+reload requires signing in again. Sign out revokes the current token when
+possible. The token remains accessible to same-origin JavaScript, so only load
 trusted scripts on the frontend origin.
