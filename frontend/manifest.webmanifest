@@ -1,0 +1,10 @@
+{
+  "name": "Expense Tracker",
+  "short_name": "Expenses",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f4ed",
+  "theme_color": "#102a43",
+  "description": "Upload bank statements and review new expenses.",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

@@ -11,8 +11,11 @@ import logging
 import os
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 import google.auth
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -28,6 +31,20 @@ app = FastAPI(title="Expense Tracker API")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 ALLOWED_PARSERS = {"nlb", "otp"}
 SCOPES = processor.SCOPES
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000").split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 def _sheets_service():
     credentials_path = os.getenv("SERVICE_ACCOUNT_FILE")
@@ -54,12 +71,27 @@ def _sheets_service():
     return build("sheets", "v4", credentials=credentials)
 
 
+def _require_google_user(authorization: str | None):
+    if not GOOGLE_CLIENT_ID:
+        return None
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Google sign-in is required")
+    try:
+        return id_token.verify_oauth2_token(
+            authorization[7:], google_requests.Request(), audience=GOOGLE_CLIENT_ID
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=401, detail="Invalid Google sign-in token") from error
+
+
 @app.post("/statements")
 async def upload_statement(
     file: UploadFile = File(...),
     parser_type: str = Form(...),
+    authorization: str | None = Header(default=None),
 ):
     request_id = str(uuid4())
+    _require_google_user(authorization)
     filename = file.filename or ""
     log.info(
         "Statement upload started request_id=%s parser_type=%s filename=%s",

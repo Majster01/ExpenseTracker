@@ -98,5 +98,25 @@ curl http://localhost:8080/docs
 ## Project layout
 
 `backend/` contains the API entry point, processor, and bank parser modules.
-`frontend/` is reserved for the future mobile client and is intentionally empty.
+`frontend/` contains the static PWA deployed through GitHub Pages. Set the
+`googleClientId` value in `frontend/config.js` to the Web OAuth client ID before
+deploying. The API base URL and spreadsheet link are configured in the same file.
 Runtime data and generated CSV files remain at the project root.
+
+## GitHub Pages PWA
+
+The frontend is a static PWA, so GitHub Pages hosts the interface while Cloud
+Run hosts `/statements`. Enable GitHub Pages for the repository using **GitHub
+Actions** as the source. The workflow in `.github/workflows/pages.yml` deploys
+the `frontend/` directory on pushes to `main`.
+
+Create a Google OAuth Web client and add the final GitHub Pages origin to its
+authorized JavaScript origins. Set the same client ID in `frontend/config.js`
+and the Cloud Run `_GOOGLE_CLIENT_ID` substitution in `cloudbuild.yaml`. Set
+`_ALLOWED_ORIGINS` to the exact Pages origin, for example
+`https://your-user.github.io/your-repository`.
+
+When `GOOGLE_CLIENT_ID` is configured, the API requires a valid Google ID token
+in the upload request. CORS is restricted to `ALLOWED_ORIGINS`; do not use `*`.
+The app currently supports PDF uploads with the `nlb` and `otp` parsers. CSV
+uploads are intentionally deferred.
