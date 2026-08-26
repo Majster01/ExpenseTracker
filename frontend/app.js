@@ -5,11 +5,9 @@
   const fileLabel = document.querySelector('#file-label');
   const uploadButton = document.querySelector('#upload-button');
   const uploadMessage = document.querySelector('#upload-message');
-  const authMessage = document.querySelector('#auth-message');
   const userStatus = document.querySelector('#user-status');
-  const signOutButton = document.querySelector('#sign-out-button');
+  const authButton = document.querySelector('#auth-button');
   const resultPanel = document.querySelector('#result-panel');
-  const authPanel = document.querySelector('#auth-panel');
   const tokenState = { value: null, expiresAt: 0 };
   const googleSheetsScope = 'https://www.googleapis.com/auth/spreadsheets';
   const googleIdentityScopes = 'openid email profile';
@@ -24,15 +22,23 @@
     const signedIn = Boolean(token && tokenState.expiresAt > Date.now());
     userStatus.textContent = signedIn ? 'Signed in with Google' : 'Not signed in';
     userStatus.classList.toggle('signed-in', signedIn);
-    authPanel.hidden = signedIn;
-    signOutButton.hidden = !signedIn;
+    authButton.textContent = signedIn ? 'Sign out' : 'Sign in';
+    authButton.disabled = false;
     updateButton();
+  };
+
+  const setLoadingState = () => {
+    userStatus.textContent = 'Restoring session...';
+    userStatus.classList.remove('signed-in');
+    authButton.textContent = 'Restoring...';
+    authButton.disabled = true;
+    uploadButton.disabled = true;
   };
 
   const clearAuthentication = async (message = '') => {
     setAuthenticatedState(null);
     tokenState.expiresAt = 0;
-    setMessage(authMessage, message, Boolean(message));
+    setMessage(uploadMessage, message, Boolean(message));
   };
 
   const setMessage = (element, message, error = false) => {
@@ -69,7 +75,7 @@
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.detail || 'Google session has expired.');
         storeAccessToken(payload);
-        setMessage(authMessage, '');
+        setMessage(uploadMessage, '');
         return payload.access_token;
       })
       .catch((error) => {
@@ -100,7 +106,7 @@
       const payload = await loginResponse.json().catch(() => ({}));
       if (!loginResponse.ok) throw new Error(payload.detail || 'Google sign-in failed.');
       storeAccessToken(payload);
-      setMessage(authMessage, '');
+      setMessage(uploadMessage, '');
       loginResolve?.(payload.access_token);
     } catch (error) {
       loginReject?.(error);
@@ -122,8 +128,7 @@
 
   const initializeGoogle = () => {
     if (!config.googleClientId) {
-      setMessage(authMessage, 'Google sign-in is not configured for this deployment.', true);
-      updateButton();
+      setMessage(uploadMessage, 'Google sign-in is not configured for this deployment.', true);
       return;
     }
     if (!window.google?.accounts?.oauth2) {
@@ -140,24 +145,19 @@
       clientId: config.googleClientId,
       requestedScope: googleSheetsScope,
     });
-    const signInButton = document.createElement('button');
-    signInButton.className = 'google-button';
-    signInButton.type = 'button';
-    signInButton.textContent = 'Sign in with Google';
-    signInButton.addEventListener('click', () => {
-      loginWithCode().catch((error) => setMessage(authMessage, error.message, true));
-    });
-    document.querySelector('#google-signin').replaceChildren(signInButton);
-    refreshSession().catch(() => {});
   };
-  initializeGoogle();
-  setAuthenticatedState(null);
-
-  signOutButton.addEventListener('click', async () => {
-    window.clearTimeout(refreshTimer);
-    await fetch(`${config.apiBaseUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
-    await clearAuthentication();
+  setLoadingState();
+  authButton.addEventListener('click', async () => {
+    if (tokenState.value) {
+      window.clearTimeout(refreshTimer);
+      await fetch(`${config.apiBaseUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
+      await clearAuthentication();
+      return;
+    }
+    loginWithCode().catch((error) => setMessage(uploadMessage, error.message, true));
   });
+  refreshSession().catch(() => {});
+  initializeGoogle();
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();

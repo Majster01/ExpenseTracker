@@ -13,8 +13,9 @@ body::before { content: ''; position: fixed; inset: 0 0 auto; height: 390px; z-i
 .user-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #bdc8d3; }
 .user-status.signed-in::before { background: var(--teal); }
 .user-actions { gap: 14px; }
-.sign-out-button { padding: 7px 10px; color: var(--muted); background: transparent; border: 1px solid var(--line); font-size: 12px; }
-.sign-out-button:hover { color: var(--ink); background: white; }
+.auth-button { padding: 7px 10px; color: var(--muted); background: transparent; border: 1px solid var(--line); font-size: 12px; }
+.auth-button:hover:not(:disabled) { color: var(--ink); background: white; }
+.auth-button:disabled { opacity: .65; cursor: wait; }
 .intro { max-width: 690px; margin-bottom: 42px; }
 .eyebrow, .panel-kicker { margin: 0 0 10px; color: var(--coral); text-transform: uppercase; letter-spacing: .13em; font: 700 11px 'Space Grotesk', sans-serif; }
 h1, h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0; }
@@ -22,14 +23,10 @@ h1 { max-width: 650px; font-size: clamp(2.35rem, 7vw, 4.8rem); line-height: .98;
 .lede { max-width: 530px; margin: 22px 0 0; color: var(--muted); line-height: 1.6; font-size: 16px; }
 .workspace { display: grid; grid-template-columns: .88fr 1.12fr; gap: 18px; align-items: start; }
 .panel { padding: 27px; background: rgba(255, 253, 248, .88); border: 1px solid rgba(217, 226, 236, .9); border-radius: 8px; box-shadow: var(--shadow); }
-.auth-panel { padding: 20px; }
-.auth-panel[hidden] { display: none; }
 .panel-heading { justify-content: space-between; align-items: flex-start; margin-bottom: 25px; }
 h2 { font-size: 22px; }
 .muted, .form-message { color: var(--muted); line-height: 1.5; }
-.auth-panel h2 { font-size: 19px; }
 .muted { margin: 9px 0 16px; font-size: 13px; }
-.google-button { min-height: 40px; }
 .form-message { min-height: 22px; margin: 12px 0 0; font-size: 13px; }
 .form-message.error { color: var(--coral); }
 .file-limit { padding: 6px 8px; color: var(--teal); background: #e3f1ef; border-radius: 4px; font-size: 11px; font-weight: 700; }

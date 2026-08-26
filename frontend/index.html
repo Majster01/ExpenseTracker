@@ -15,8 +15,8 @@
     <header class="topbar">
       <div class="brand"><span class="brand-mark">ET</span><span>Expense Tracker</span></div>
       <div class="user-actions">
-        <div id="user-status" class="user-status" aria-live="polite">Not signed in</div>
-        <button id="sign-out-button" class="sign-out-button" type="button" hidden>Sign out</button>
+        <div id="user-status" class="user-status" aria-live="polite">Restoring session...</div>
+        <button id="auth-button" class="auth-button" type="button" disabled>Restoring...</button>
       </div>
     </header>
 
@@ -27,16 +27,6 @@
     </section>
 
     <section class="workspace" aria-label="Statement upload">
-      <div class="panel auth-panel" id="auth-panel">
-        <div>
-          <p class="panel-kicker">Access</p>
-          <h2>Sign in to continue</h2>
-          <p class="muted">Your statement is sent directly to the private processing API.</p>
-        </div>
-        <div id="google-signin" class="google-button"></div>
-        <p id="auth-message" class="form-message" role="status"></p>
-      </div>
-
       <form class="panel upload-panel" id="upload-form">
         <div class="panel-heading">
           <div><p class="panel-kicker">Import</p><h2>Choose a statement</h2></div>
