@@ -12,7 +12,12 @@
   const authPanel = document.querySelector('#auth-panel');
   const tokenState = { value: null, expiresAt: 0 };
   const googleSheetsScope = 'https://www.googleapis.com/auth/spreadsheets';
-  let tokenClient = null;
+  const googleIdentityScopes = 'openid email profile';
+  let codeClient = null;
+  let refreshTimer = null;
+  let refreshPromise = null;
+  let loginResolve = null;
+  let loginReject = null;
 
   const setAuthenticatedState = (token) => {
     tokenState.value = token;
@@ -46,42 +51,73 @@
     updateButton();
   });
 
-  const requestAccessToken = (prompt = '') => new Promise((resolve, reject) => {
-    if (!tokenClient) {
-      console.error('[auth] OAuth token client is not initialized');
+  const storeAccessToken = (payload) => {
+    tokenState.value = payload.access_token;
+    tokenState.expiresAt = Date.now() + (payload.expires_in * 1000);
+    setAuthenticatedState(payload.access_token);
+    window.clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(() => refreshSession().catch(() => {}), Math.max(1000, payload.expires_in * 1000 - 60000));
+  };
+
+  const refreshSession = () => {
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = fetch(`${config.apiBaseUrl}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.detail || 'Google session has expired.');
+        storeAccessToken(payload);
+        setMessage(authMessage, '');
+        return payload.access_token;
+      })
+      .catch((error) => {
+        clearAuthentication();
+        throw error;
+      })
+      .finally(() => { refreshPromise = null; });
+    return refreshPromise;
+  };
+
+  const handleCodeResponse = async (response) => {
+    if (response.error) {
+      loginReject?.(new Error('Google sign-in was not completed.'));
+      loginResolve = null;
+      loginReject = null;
+      return;
+    }
+    try {
+      const loginResponse = await fetch(`${config.apiBaseUrl}/auth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({ code: response.code }),
+      });
+      const payload = await loginResponse.json().catch(() => ({}));
+      if (!loginResponse.ok) throw new Error(payload.detail || 'Google sign-in failed.');
+      storeAccessToken(payload);
+      setMessage(authMessage, '');
+      loginResolve?.(payload.access_token);
+    } catch (error) {
+      loginReject?.(error);
+    } finally {
+      loginResolve = null;
+      loginReject = null;
+    }
+  };
+
+  const loginWithCode = () => new Promise((resolve, reject) => {
+    if (!codeClient) {
       reject(new Error('Google sign-in is not ready.'));
       return;
     }
-    tokenClient.callback = (response) => {
-      if (response.error) {
-        console.error('[auth] OAuth token request failed', {
-          error: response.error,
-          errorDescription: response.error_description || 'unavailable',
-          requestedScope: googleSheetsScope,
-        });
-        reject(new Error('Google sign-in was not completed.'));
-        return;
-      }
-      const grantedScopes = response.scope ? response.scope.split(' ') : [];
-      const missingScopes = grantedScopes.includes(googleSheetsScope) ? [] : [googleSheetsScope];
-      console.info('[auth] OAuth token received', {
-        tokenType: response.token_type || 'unknown',
-        expiresInSeconds: response.expires_in,
-        grantedScopes,
-        missingScopes,
-      });
-      if (missingScopes.length) {
-        console.error('[auth] OAuth token is missing required scopes', { missingScopes });
-        reject(new Error('Google Sheets access was not granted.'));
-        return;
-      }
-      tokenState.value = response.access_token;
-      tokenState.expiresAt = Date.now() + (response.expires_in * 1000);
-      setAuthenticatedState(response.access_token);
-      setMessage(authMessage, '');
-      resolve(response.access_token);
-    };
-    tokenClient.requestAccessToken({ prompt });
+    loginResolve = resolve;
+    loginReject = reject;
+    codeClient.requestCode();
   });
 
   const initializeGoogle = () => {
@@ -94,12 +130,13 @@
       window.setTimeout(initializeGoogle, 100);
       return;
     }
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
+    codeClient = window.google.accounts.oauth2.initCodeClient({
       client_id: config.googleClientId,
-      scope: googleSheetsScope,
-      callback: () => {},
+      scope: `${googleIdentityScopes} ${googleSheetsScope}`,
+      ux_mode: 'popup',
+      callback: handleCodeResponse,
     });
-    console.info('[auth] OAuth token client initialized', {
+    console.info('[auth] OAuth code client initialized', {
       clientId: config.googleClientId,
       requestedScope: googleSheetsScope,
     });
@@ -108,17 +145,17 @@
     signInButton.type = 'button';
     signInButton.textContent = 'Sign in with Google';
     signInButton.addEventListener('click', () => {
-      requestAccessToken('consent').catch((error) => setMessage(authMessage, error.message, true));
+      loginWithCode().catch((error) => setMessage(authMessage, error.message, true));
     });
     document.querySelector('#google-signin').replaceChildren(signInButton);
+    refreshSession().catch(() => {});
   };
   initializeGoogle();
   setAuthenticatedState(null);
 
   signOutButton.addEventListener('click', async () => {
-    if (tokenState.value && window.google?.accounts?.oauth2) {
-      window.google.accounts.oauth2.revoke(tokenState.value, () => {});
-    }
+    window.clearTimeout(refreshTimer);
+    await fetch(`${config.apiBaseUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
     await clearAuthentication();
   });
 
@@ -141,11 +178,11 @@
     body.append('file', file);
     try {
       if (!tokenState.value || tokenState.expiresAt <= Date.now() + 5000) {
-        await requestAccessToken('');
+        await refreshSession();
       }
       const sendUpload = () => fetch(`${config.apiBaseUrl}/statements`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${tokenState.value}` },
+        credentials: 'include',
         body,
       });
       let response = await sendUpload();
@@ -155,8 +192,8 @@
         detail: payload.detail || 'none',
       });
       if (response.status === 401) {
-        console.warn('[auth] Access token rejected; requesting a fresh token');
-        await requestAccessToken('');
+        console.warn('[auth] Application session rejected; requesting a fresh session');
+        await refreshSession();
         response = await sendUpload();
         payload = await response.json().catch(() => ({}));
         console.info('[auth] Statement retry authorization response', {

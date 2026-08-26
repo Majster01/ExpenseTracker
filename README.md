@@ -30,11 +30,18 @@ curl -X POST http://127.0.0.1:8000/expenses \
   -d '{"title":"Groceries","amount":42.50,"category":"Food","date":"2026-08-26"}'
 ```
 
-When `GOOGLE_CLIENT_ID` is configured, the frontend requests a Google OAuth
-access token with the `https://www.googleapis.com/auth/spreadsheets` scope and
-sends it to the backend. The backend validates that token by reading the
-working spreadsheet, so the caller's Google account must have access to that
-spreadsheet. Set `MAX_UPLOAD_BYTES` to change the 10 MiB upload limit.
+When `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured, the frontend
+uses the Google Identity Services authorization-code flow. The backend exchanges
+the one-time code, stores the encrypted per-user refresh token in Firestore, and
+returns a short-lived access token while setting an HttpOnly application-session
+cookie. The browser uses that cookie for `/statements`; Google refresh tokens are
+never sent to or stored by the frontend.
+
+The requested Google API scope is
+`https://www.googleapis.com/auth/spreadsheets`. The `openid email profile` scopes
+identify the Google subject used to key the Firestore token record. The user's
+Google account must have access to the working spreadsheet. Set
+`MAX_UPLOAD_BYTES` to change the 10 MiB upload limit.
 
 `GOOGLE_CLIENT_ID` is required for the statements endpoint. The backend never
 loads service-account credentials or Application Default Credentials; every
@@ -52,8 +59,10 @@ The backend is containerized from the repository root. Cloud Run supplies the
 `PORT` environment variable, and the container binds to `0.0.0.0`.
 
 Do not put service-account keys in the container or Cloud Build settings. The
-backend uses only the authenticated caller's OAuth credentials and requires
-each caller to have access to the target spreadsheet.
+backend uses the caller's OAuth credentials and requires each caller to have
+access to the target spreadsheet. Store `GOOGLE_CLIENT_SECRET` and
+`TOKEN_ENCRYPTION_KEY` in Secret Manager and grant the Cloud Run runtime service
+account access to those secrets and the Firestore database.
 
 Enable these APIs in the Google Cloud project:
 
@@ -80,7 +89,9 @@ to Artifact Registry and deploy Cloud Run services.
 The supplied Cloud Build configuration allows unauthenticated network access
 to Cloud Run while the application enforces Google OAuth when
 `GOOGLE_CLIENT_ID` is configured. Keep `ALLOWED_ORIGINS` restricted to the
-actual frontend origin before exposing personal data.
+actual frontend origin before exposing personal data. Credentialed browser
+requests require the exact origin and the session cookie uses `Secure`,
+`HttpOnly`, and `SameSite=None` in production.
 
 The `/expenses` endpoints remain in-memory and can reset when Cloud Run
 restarts or scales. Statement imports are persisted in Google Sheets.
@@ -113,7 +124,9 @@ authorized JavaScript origins. Configure the OAuth consent screen and enable
 the Google Sheets API. Set the same client ID in `frontend/config.js` and the
 Cloud Run `_GOOGLE_CLIENT_ID` substitution in `cloudbuild.yaml`. Set
 `_ALLOWED_ORIGINS` to the exact Pages origin, for example
-`https://your-user.github.io/your-repository`.
+`https://your-user.github.io`, and set `_GOOGLE_REDIRECT_URI` to the same origin.
+For the popup authorization-code flow, the backend exchanges the code using
+that exact origin as `redirect_uri`.
 
 When `GOOGLE_CLIENT_ID` is configured, the API requires a valid Google OAuth
 access token in the upload request. CORS is restricted to `ALLOWED_ORIGINS`; do
@@ -121,7 +134,9 @@ not use `*`. The account must be able to access the configured working sheet.
 The app currently supports PDF uploads with the `nlb` and `otp` parsers. CSV
 uploads are intentionally deferred.
 
-Google access tokens are short-lived and kept in browser memory only. A page
-reload requires signing in again. Sign out revokes the current token when
-possible. The token remains accessible to same-origin JavaScript, so only load
-trusted scripts on the frontend origin.
+The login and refresh endpoints return short-lived access tokens for the
+frontend session manager, while the durable refresh token remains encrypted in
+Firestore. Sign out invalidates the application session and clears its cookie;
+revoking Google consent is a separate operation. Only load trusted scripts on
+the frontend origin because same-origin scripts can initiate authenticated
+requests.

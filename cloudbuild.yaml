@@ -5,6 +5,7 @@ substitutions:
   _IMAGE: api
   _GOOGLE_CLIENT_ID: replace-with-google-client-id
   _ALLOWED_ORIGINS: https://replace-with-github-pages-origin
+  _GOOGLE_REDIRECT_URI: https://replace-with-github-pages-origin
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -29,7 +30,8 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
-      - --set-env-vars=GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},ALLOWED_ORIGINS=${_ALLOWED_ORIGINS}
+      - --set-env-vars=GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},ALLOWED_ORIGINS=${_ALLOWED_ORIGINS},GOOGLE_REDIRECT_URI=${_GOOGLE_REDIRECT_URI},COOKIE_SECURE=true
+      - --set-secrets=GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=expense-token-encryption-key:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
