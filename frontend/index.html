@@ -14,7 +14,10 @@
   <main class="shell">
     <header class="topbar">
       <div class="brand"><span class="brand-mark">ET</span><span>Expense Tracker</span></div>
-      <div id="user-status" class="user-status" aria-live="polite">Not signed in</div>
+      <div class="user-actions">
+        <div id="user-status" class="user-status" aria-live="polite">Not signed in</div>
+        <button id="sign-out-button" class="sign-out-button" type="button" hidden>Sign out</button>
+      </div>
     </header>
 
     <section class="intro">

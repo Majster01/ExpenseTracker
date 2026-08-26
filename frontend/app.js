@@ -7,9 +7,82 @@
   const uploadMessage = document.querySelector('#upload-message');
   const authMessage = document.querySelector('#auth-message');
   const userStatus = document.querySelector('#user-status');
+  const signOutButton = document.querySelector('#sign-out-button');
   const resultPanel = document.querySelector('#result-panel');
   const authPanel = document.querySelector('#auth-panel');
   const tokenState = { value: null };
+  const AUTH_DB_NAME = 'expense-tracker-auth';
+  const AUTH_STORE_NAME = 'credentials';
+  const AUTH_KEY = 'google-id-token';
+
+  const openAuthDatabase = () => new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(AUTH_DB_NAME, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(AUTH_STORE_NAME);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+  const readStoredToken = async () => {
+    const database = await openAuthDatabase();
+    return new Promise((resolve, reject) => {
+      const request = database.transaction(AUTH_STORE_NAME, 'readonly')
+        .objectStore(AUTH_STORE_NAME)
+        .get(AUTH_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    }).finally(() => database.close());
+  };
+
+  const storeToken = async (token) => {
+    const database = await openAuthDatabase();
+    return new Promise((resolve, reject) => {
+      const request = database.transaction(AUTH_STORE_NAME, 'readwrite')
+        .objectStore(AUTH_STORE_NAME)
+        .put(token, AUTH_KEY);
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    }).finally(() => database.close());
+  };
+
+  const removeStoredToken = async () => {
+    const database = await openAuthDatabase();
+    return new Promise((resolve, reject) => {
+      const request = database.transaction(AUTH_STORE_NAME, 'readwrite')
+        .objectStore(AUTH_STORE_NAME)
+        .delete(AUTH_KEY);
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    }).finally(() => database.close());
+  };
+
+  const tokenIsUsable = (token) => {
+    try {
+      const payloadSegment = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(window.atob(payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, '=')));
+      return typeof payload.exp === 'number' && payload.exp * 1000 > Date.now();
+    } catch {
+      return false;
+    }
+  };
+
+  const setAuthenticatedState = (token) => {
+    tokenState.value = token;
+    const signedIn = Boolean(token);
+    userStatus.textContent = signedIn ? 'Signed in with Google' : 'Not signed in';
+    userStatus.classList.toggle('signed-in', signedIn);
+    authPanel.classList.toggle('authenticated', signedIn);
+    signOutButton.hidden = !signedIn;
+    updateButton();
+  };
+
+  const clearAuthentication = async (message = '') => {
+    setAuthenticatedState(null);
+    setMessage(authMessage, message, Boolean(message));
+    try {
+      await removeStoredToken();
+    } catch {
+    }
+  };
 
   const setMessage = (element, message, error = false) => {
     element.textContent = message;
@@ -28,12 +101,25 @@
   });
 
   window.handleGoogleCredential = (response) => {
-    tokenState.value = response.credential;
-    userStatus.textContent = 'Signed in with Google';
-    userStatus.classList.add('signed-in');
-    authPanel.classList.add('authenticated');
+    setAuthenticatedState(response.credential);
+    storeToken(response.credential).catch(() => {
+      setMessage(authMessage, 'Signed in, but this browser could not save the session.', true);
+    });
     setMessage(authMessage, '');
-    updateButton();
+  };
+
+  const restoreAuthentication = async () => {
+    try {
+      const storedToken = await readStoredToken();
+      if (!storedToken) return;
+      if (tokenIsUsable(storedToken)) {
+        setAuthenticatedState(storedToken);
+      } else {
+        await clearAuthentication();
+      }
+    } catch {
+      setMessage(authMessage, 'Sign in to continue.', false);
+    }
   };
 
   const initializeGoogle = () => {
@@ -50,6 +136,9 @@
     window.google.accounts.id.renderButton(document.querySelector('#google-signin'), { theme: 'outline', size: 'large', width: 280 });
   };
   initializeGoogle();
+  restoreAuthentication();
+
+  signOutButton.addEventListener('click', () => clearAuthentication());
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -72,6 +161,9 @@
       const headers = tokenState.value ? { Authorization: `Bearer ${tokenState.value}` } : {};
       const response = await fetch(`${config.apiBaseUrl}/statements`, { method: 'POST', headers, body });
       const payload = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        await clearAuthentication('Your Google session expired. Sign in again to continue.');
+      }
       if (!response.ok) throw new Error(payload.detail || 'Statement processing failed.');
       document.querySelector('#added-count').textContent = payload.rows_added ?? 0;
       document.querySelector('#review-count').textContent = payload.needs_categorization ?? 0;

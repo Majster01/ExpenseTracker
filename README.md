@@ -120,3 +120,9 @@ When `GOOGLE_CLIENT_ID` is configured, the API requires a valid Google ID token
 in the upload request. CORS is restricted to `ALLOWED_ORIGINS`; do not use `*`.
 The app currently supports PDF uploads with the `nlb` and `otp` parsers. CSV
 uploads are intentionally deferred.
+
+The frontend persists the Google ID token in IndexedDB so sign-in survives page
+reloads and browser restarts. Expired or rejected tokens are removed, and the
+Sign out control clears the stored session. Clearing site data also signs the
+user out. The token remains accessible to same-origin JavaScript, so only load
+trusted scripts on the frontend origin.
