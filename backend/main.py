@@ -34,7 +34,7 @@ SCOPES = processor.SCOPES
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000", "https://majster01.github.io").split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000,https://majster01.github.io").split(",")
     if origin.strip()
 ]
 
