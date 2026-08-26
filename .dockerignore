@@ -7,4 +7,3 @@ __pycache__/
 output/
 service_account.json
 .env*
-frontend/
