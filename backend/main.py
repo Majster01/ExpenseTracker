@@ -8,6 +8,7 @@ to the working spreadsheet.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Optional
@@ -15,6 +16,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 from google.oauth2 import credentials as user_credentials
 from googleapiclient.discovery import build
@@ -47,6 +49,12 @@ app.add_middleware(
 )
 
 def _require_google_user(authorization: Optional[str]):
+    log.info(
+        "Google Sheets authorization check configured=%s required_scopes=%s spreadsheet_id=%s",
+        bool(GOOGLE_CLIENT_ID),
+        SCOPES,
+        processor.SPREADSHEET_ID,
+    )
     if not GOOGLE_CLIENT_ID:
         raise HTTPException(
             status_code=500,
@@ -57,6 +65,7 @@ def _require_google_user(authorization: Optional[str]):
     access_token = authorization[7:].strip()
     if not access_token:
         raise HTTPException(status_code=401, detail="Google sign-in is required")
+    log.info("Google Sheets caller token received token_length=%d", len(access_token))
 
     credentials = user_credentials.Credentials(
         token=access_token,
@@ -68,7 +77,15 @@ def _require_google_user(authorization: Optional[str]):
             spreadsheetId=processor.SPREADSHEET_ID,
             fields="spreadsheetId",
         ).execute()
+    except RefreshError as error:
+        log.warning("Google Sheets authorization failed reason=token_refresh_failed")
+        raise HTTPException(status_code=401, detail="Invalid or expired Google sign-in") from error
     except HttpError as error:
+        log.warning(
+            "Google Sheets authorization failed status_code=%s reason=%s",
+            error.resp.status,
+            _google_error_reason(error),
+        )
         if error.resp.status == 401:
             raise HTTPException(status_code=401, detail="Invalid or expired Google sign-in") from error
         if error.resp.status == 403:
@@ -79,6 +96,18 @@ def _require_google_user(authorization: Optional[str]):
         raise HTTPException(status_code=502, detail="Could not validate Google Sheets access") from error
     log.info("Validated caller access to spreadsheet client_id=%s", GOOGLE_CLIENT_ID)
     return sheets_service
+
+
+def _google_error_reason(error: HttpError) -> str:
+    """Return a short Google API error reason without logging response content."""
+    try:
+        error_data = json.loads(error.content.decode("utf-8"))
+        errors = error_data.get("error", {}).get("errors", [])
+        if errors and errors[0].get("reason"):
+            return errors[0]["reason"]
+        return error_data.get("error", {}).get("status", "unknown")
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return "unknown"
 
 
 @app.post("/statements")

@@ -11,6 +11,7 @@
   const resultPanel = document.querySelector('#result-panel');
   const authPanel = document.querySelector('#auth-panel');
   const tokenState = { value: null, expiresAt: 0 };
+  const googleSheetsScope = 'https://www.googleapis.com/auth/spreadsheets';
   let tokenClient = null;
 
   const setAuthenticatedState = (token) => {
@@ -47,12 +48,31 @@
 
   const requestAccessToken = (prompt = '') => new Promise((resolve, reject) => {
     if (!tokenClient) {
+      console.error('[auth] OAuth token client is not initialized');
       reject(new Error('Google sign-in is not ready.'));
       return;
     }
     tokenClient.callback = (response) => {
       if (response.error) {
+        console.error('[auth] OAuth token request failed', {
+          error: response.error,
+          errorDescription: response.error_description || 'unavailable',
+          requestedScope: googleSheetsScope,
+        });
         reject(new Error('Google sign-in was not completed.'));
+        return;
+      }
+      const grantedScopes = response.scope ? response.scope.split(' ') : [];
+      const missingScopes = grantedScopes.includes(googleSheetsScope) ? [] : [googleSheetsScope];
+      console.info('[auth] OAuth token received', {
+        tokenType: response.token_type || 'unknown',
+        expiresInSeconds: response.expires_in,
+        grantedScopes,
+        missingScopes,
+      });
+      if (missingScopes.length) {
+        console.error('[auth] OAuth token is missing required scopes', { missingScopes });
+        reject(new Error('Google Sheets access was not granted.'));
         return;
       }
       tokenState.value = response.access_token;
@@ -76,8 +96,12 @@
     }
     tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: config.googleClientId,
-      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      scope: googleSheetsScope,
       callback: () => {},
+    });
+    console.info('[auth] OAuth token client initialized', {
+      clientId: config.googleClientId,
+      requestedScope: googleSheetsScope,
     });
     const signInButton = document.createElement('button');
     signInButton.className = 'google-button';
@@ -119,11 +143,29 @@
       if (!tokenState.value || tokenState.expiresAt <= Date.now() + 5000) {
         await requestAccessToken('');
       }
-      const headers = tokenState.value ? { Authorization: `Bearer ${tokenState.value}` } : {};
-      const response = await fetch(`${config.apiBaseUrl}/statements`, { method: 'POST', headers, body });
-      const payload = await response.json().catch(() => ({}));
+      const sendUpload = () => fetch(`${config.apiBaseUrl}/statements`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenState.value}` },
+        body,
+      });
+      let response = await sendUpload();
+      let payload = await response.json().catch(() => ({}));
+      console.info('[auth] Statement authorization response', {
+        status: response.status,
+        detail: payload.detail || 'none',
+      });
       if (response.status === 401) {
-        await clearAuthentication('Your Google session expired. Sign in again to continue.');
+        console.warn('[auth] Access token rejected; requesting a fresh token');
+        await requestAccessToken('');
+        response = await sendUpload();
+        payload = await response.json().catch(() => ({}));
+        console.info('[auth] Statement retry authorization response', {
+          status: response.status,
+          detail: payload.detail || 'none',
+        });
+        if (response.status === 401) {
+          await clearAuthentication('Your Google session expired. Sign in again to continue.');
+        }
       }
       if (!response.ok) throw new Error(payload.detail || 'Statement processing failed.');
       document.querySelector('#added-count').textContent = payload.rows_added ?? 0;

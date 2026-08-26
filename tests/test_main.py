@@ -4,11 +4,21 @@ import unittest
 from unittest.mock import Mock, patch
 
 from fastapi import HTTPException, UploadFile
+from google.auth.exceptions import RefreshError
+from googleapiclient.errors import HttpError
 
 from backend import main
 
 
 class MainAuthTests(unittest.TestCase):
+    def test_google_error_reason_extracts_reason_without_response_dump(self):
+        error = HttpError(
+            Mock(status=403),
+            b'{"error":{"errors":[{"reason":"insufficientPermissions"}]}}',
+        )
+
+        self.assertEqual(main._google_error_reason(error), "insufficientPermissions")
+
     def test_require_google_user_rejects_missing_oauth_configuration(self):
         with patch.object(main, "GOOGLE_CLIENT_ID", None):
             with self.assertRaises(HTTPException) as context:
@@ -53,6 +63,20 @@ class MainAuthTests(unittest.TestCase):
         with patch.object(main, "GOOGLE_CLIENT_ID", "client-id"):
             with self.assertRaises(HTTPException) as context:
                 main._require_google_user("Bearer   ")
+
+        self.assertEqual(context.exception.status_code, 401)
+
+    def test_require_google_user_maps_failed_token_refresh_to_401(self):
+        sheets_service = Mock()
+        sheets_service.spreadsheets().get.return_value.execute.side_effect = RefreshError(
+            "The access token is invalid"
+        )
+
+        with patch.object(main, "GOOGLE_CLIENT_ID", "client-id"), patch.object(
+            main.user_credentials, "Credentials"
+        ), patch.object(main, "build", return_value=sheets_service):
+            with self.assertRaises(HTTPException) as context:
+                main._require_google_user("Bearer rejected-token")
 
         self.assertEqual(context.exception.status_code, 401)
 
