@@ -36,10 +36,9 @@ sends it to the backend. The backend validates that token by reading the
 working spreadsheet, so the caller's Google account must have access to that
 spreadsheet. Set `MAX_UPLOAD_BYTES` to change the 10 MiB upload limit.
 
-For local development without `GOOGLE_CLIENT_ID`, the backend uses a service
-account from `SERVICE_ACCOUNT_FILE` or Application Default Credentials. This
-fallback is intended for local/trusted use only; authenticated deployments use
-the caller's Google credentials for all Sheets operations.
+`GOOGLE_CLIENT_ID` is required for the statements endpoint. The backend never
+loads service-account credentials or Application Default Credentials; every
+Sheets operation uses the authenticated caller's OAuth access token.
 
 Uploaded PDFs are not written to disk by the endpoint. Google Sheets
 deduplication prevents duplicate rows when a statement is uploaded again.
@@ -52,14 +51,9 @@ PDF executable.
 The backend is containerized from the repository root. Cloud Run supplies the
 `PORT` environment variable, and the container binds to `0.0.0.0`.
 
-Before deploying, rotate the key represented by `service_account.json`: it has
-been committed to Git history. Remove the file from the repository and remote
-history after rotation. Do not put it in the container or Cloud Build settings.
-
-For unauthenticated local development, set `SERVICE_ACCOUNT_FILE` to a local
-JSON key path or use Application Default Credentials. Authenticated Cloud Run
-deployments use the caller's OAuth credentials and require each caller to have
-access to the target spreadsheet.
+Do not put service-account keys in the container or Cloud Build settings. The
+backend uses only the authenticated caller's OAuth credentials and requires
+each caller to have access to the target spreadsheet.
 
 Enable these APIs in the Google Cloud project:
 

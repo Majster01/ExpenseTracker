@@ -9,6 +9,13 @@ from backend import main
 
 
 class MainAuthTests(unittest.TestCase):
+    def test_require_google_user_rejects_missing_oauth_configuration(self):
+        with patch.object(main, "GOOGLE_CLIENT_ID", None):
+            with self.assertRaises(HTTPException) as context:
+                main._require_google_user("Bearer caller-access-token")
+
+        self.assertEqual(context.exception.status_code, 500)
+
     def test_require_google_user_builds_and_validates_caller_credentials(self):
         sheets_service = Mock()
         sheets_service.spreadsheets().get.return_value.execute.return_value = {
@@ -39,6 +46,13 @@ class MainAuthTests(unittest.TestCase):
         with patch.object(main, "GOOGLE_CLIENT_ID", "client-id"):
             with self.assertRaises(HTTPException) as context:
                 main._require_google_user(None)
+
+        self.assertEqual(context.exception.status_code, 401)
+
+    def test_require_google_user_rejects_empty_bearer_token(self):
+        with patch.object(main, "GOOGLE_CLIENT_ID", "client-id"):
+            with self.assertRaises(HTTPException) as context:
+                main._require_google_user("Bearer   ")
 
         self.assertEqual(context.exception.status_code, 401)
 

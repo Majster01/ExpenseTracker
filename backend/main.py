@@ -8,7 +8,6 @@ to the working spreadsheet.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Optional
@@ -16,10 +15,8 @@ from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-import google.auth
 from googleapiclient.errors import HttpError
 from google.oauth2 import credentials as user_credentials
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from . import processor
@@ -49,34 +46,12 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-def _service_account_sheets_service():
-    credentials_path = os.getenv("SERVICE_ACCOUNT_FILE")
-    if credentials_path:
-        log.info("Loading Sheets credentials from configured file path")
-        with open(credentials_path, encoding="utf-8") as credentials_file:
-            credential_info = json.load(credentials_file)
-        credentials = service_account.Credentials.from_service_account_file(
-            credentials_path, scopes=SCOPES
-        )
-        client_id = credential_info.get("client_id", "unknown")
-        service_account_name = credential_info.get("client_email", "unknown")
-    else:
-        log.info("Loading Sheets credentials from Cloud Run Application Default Credentials")
-        credentials, _project_id = google.auth.default(scopes=SCOPES)
-        client_id = getattr(credentials, "client_id", "unknown")
-        service_account_name = getattr(credentials, "service_account_email", "unknown")
-    log.info(
-        "Sheets service account identity client_id=%s name=%s",
-        client_id,
-        service_account_name,
-    )
-    log.info("Building Google Sheets API client")
-    return build("sheets", "v4", credentials=credentials)
-
-
 def _require_google_user(authorization: Optional[str]):
     if not GOOGLE_CLIENT_ID:
-        return _service_account_sheets_service()
+        raise HTTPException(
+            status_code=500,
+            detail="Google OAuth is not configured",
+        )
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Google sign-in is required")
     access_token = authorization[7:].strip()

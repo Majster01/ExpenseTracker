@@ -11,7 +11,6 @@ from .parsers import base as parser_base
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-SERVICE_ACCOUNT_FILE = "service_account.json"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 SPREADSHEET_ID = "1JlIH41lNNVPEa3WJa9E7mZP5q3yY5YHm52vdJVK2PnI"
