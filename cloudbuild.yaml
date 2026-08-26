@@ -1,11 +1,11 @@
 substitutions:
-  _REGION: us-central1
+  _REGION: europe-west1
   _SERVICE: expense-tracker-api
   _REPOSITORY: expense-tracker
   _IMAGE: api
   _GOOGLE_CLIENT_ID: replace-with-google-client-id
-  _ALLOWED_ORIGINS: https://replace-with-github-pages-origin
-  _GOOGLE_REDIRECT_URI: https://replace-with-github-pages-origin
+  _ALLOWED_ORIGINS: https://replace-with-frontend-origin
+  _GOOGLE_REDIRECT_URI: https://replace-with-frontend-origin
 
 steps:
   - name: gcr.io/cloud-builders/docker

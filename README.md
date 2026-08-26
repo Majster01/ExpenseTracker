@@ -53,10 +53,11 @@ deduplication prevents duplicate rows when a statement is uploaded again.
 PDF extraction uses PyMuPDF and does not require `pdftotext` or another external
 PDF executable.
 
-## Deploy the backend to Cloud Run
+## Deploy the application to Cloud Run
 
-The backend is containerized from the repository root. Cloud Run supplies the
-`PORT` environment variable, and the container binds to `0.0.0.0`.
+The repository-root container serves both the API and the static PWA. Cloud Run
+supplies the `PORT` environment variable, and the container binds to
+`0.0.0.0`. The frontend calls `/auth/...` and `/statements` on the same origin.
 
 Do not put service-account keys in the container or Cloud Build settings. The
 backend uses the caller's OAuth credentials and requires each caller to have
@@ -73,25 +74,47 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
   developerconnect.googleapis.com
 ```
 
-Create the Artifact Registry repository once:
+Create the Artifact Registry repository once in the same region as Cloud Run:
 
 ```sh
 gcloud artifacts repositories create expense-tracker \
-  --repository-format=docker --location=us-central1
+  --repository-format=docker --location=europe-west1
 ```
 
 Connect the GitHub repository in Cloud Build or Developer Connect and create a
-trigger for the deployment branch using `cloudbuild.yaml`. Set `_REGION`,
-`_SERVICE`, `_REPOSITORY`, and `_IMAGE` substitutions if the defaults do not
-match your project. Grant the Cloud Build service account permission to push
-to Artifact Registry and deploy Cloud Run services.
+trigger for `master` using `cloudbuild.yaml`. The trigger builds one image,
+which contains `backend/` and `frontend/`, and deploys one Cloud Run service.
+Set `_REGION`, `_SERVICE`, `_REPOSITORY`, and `_IMAGE` substitutions if the
+defaults do not match your project. Set `_ALLOWED_ORIGINS` and
+`_GOOGLE_REDIRECT_URI` to the exact final frontend origin, without a trailing
+slash. A custom domain is preferred; the generated Cloud Run service URL also
+works.
+
+For a GitHub trigger created from the CLI, the shape is:
+
+```sh
+gcloud builds triggers create github \
+  --name=expense-tracker-deploy \
+  --repo-owner=YOUR_GITHUB_OWNER \
+  --repo-name=YOUR_REPOSITORY \
+  --branch-pattern='^master$' \
+  --build-config=cloudbuild.yaml \
+  --substitutions=_REGION=europe-west1,_SERVICE=expense-tracker-api,_REPOSITORY=expense-tracker,_IMAGE=api,_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID,_ALLOWED_ORIGINS=https://YOUR_FRONTEND_ORIGIN,_GOOGLE_REDIRECT_URI=https://YOUR_FRONTEND_ORIGIN
+```
+
+Grant the Cloud Build service account permission to push to Artifact Registry
+and deploy Cloud Run services. Grant the Cloud Run runtime service account
+access to the two secrets and Firestore. Configure the Google OAuth web client
+with the same frontend origin as an authorized JavaScript origin and redirect
+URI.
 
 The supplied Cloud Build configuration allows unauthenticated network access
 to Cloud Run while the application enforces Google OAuth when
 `GOOGLE_CLIENT_ID` is configured. Keep `ALLOWED_ORIGINS` restricted to the
 actual frontend origin before exposing personal data. Credentialed browser
 requests require the exact origin and the session cookie uses `Secure`,
-`HttpOnly`, and `SameSite=None` in production.
+`HttpOnly`, and `SameSite=Lax`. Same-origin serving removes the third-party
+cookie dependency that affected the GitHub Pages deployment.
 
 The `/expenses` endpoints remain in-memory and can reset when Cloud Run
 restarts or scales. Statement imports are persisted in Google Sheets.
@@ -107,26 +130,25 @@ curl http://localhost:8080/docs
 ## Project layout
 
 `backend/` contains the API entry point, processor, and bank parser modules.
-`frontend/` contains the static PWA deployed through GitHub Pages. Set the
-`googleClientId` value in `frontend/config.js` to the Web OAuth client ID before
-deploying. The API base URL and spreadsheet link are configured in the same file.
+`frontend/` contains the static PWA served by the same Cloud Run service. Set
+the `googleClientId` value in `frontend/config.js` to the Web OAuth client ID
+before deploying. `apiBaseUrl` is intentionally empty so the browser uses the
+same origin; the spreadsheet link is configured in the same file.
 Runtime data and generated CSV files remain at the project root.
 
-## GitHub Pages PWA
+## Legacy GitHub Pages deployment
 
-The frontend is a static PWA, so GitHub Pages hosts the interface while Cloud
-Run hosts `/statements`. Enable GitHub Pages for the repository using **GitHub
-Actions** as the source. The workflow in `.github/workflows/pages.yml` deploys
-the `frontend/` directory on pushes to `main`.
+GitHub Pages can still host an older frontend copy, but it keeps the
+cross-origin cookie and CORS dependency. Use the Cloud Run URL or custom domain
+for the mobile PWA after enabling the combined-service trigger.
 
-Create a Google OAuth Web client and add the final GitHub Pages origin to its
-authorized JavaScript origins. Configure the OAuth consent screen and enable
-the Google Sheets API. Set the same client ID in `frontend/config.js` and the
-Cloud Run `_GOOGLE_CLIENT_ID` substitution in `cloudbuild.yaml`. Set
-`_ALLOWED_ORIGINS` to the exact Pages origin, for example
-`https://your-user.github.io`, and set `_GOOGLE_REDIRECT_URI` to the same origin.
-For the popup authorization-code flow, the backend exchanges the code using
-that exact origin as `redirect_uri`.
+Create a Google OAuth Web client and add the final Cloud Run/custom-domain
+origin to its authorized JavaScript origins. Configure the OAuth consent screen
+and enable the Google Sheets API. Set the same client ID in
+`frontend/config.js` and the Cloud Run `_GOOGLE_CLIENT_ID` substitution.
+`_ALLOWED_ORIGINS` and `_GOOGLE_REDIRECT_URI` must use that same origin. For the
+popup authorization-code flow, the backend exchanges the code using that exact
+origin as `redirect_uri`.
 
 When `GOOGLE_CLIENT_ID` is configured, the API requires a valid Google OAuth
 access token in the upload request. CORS is restricted to `ALLOWED_ORIGINS`; do

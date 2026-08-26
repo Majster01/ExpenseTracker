@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from fastapi import Cookie, FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from google.auth.transport.requests import Request as GoogleRequest
 from google.auth.exceptions import RefreshError
 from google.oauth2 import id_token
@@ -195,7 +196,7 @@ def _set_session_cookie(response: Response, session_id: str) -> None:
         max_age=SESSION_TTL_SECONDS,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="none",
+        samesite="lax",
     )
 
 
@@ -380,3 +381,6 @@ async def upload_statement(
         raise HTTPException(status_code=500, detail="Statement processing failed") from error
     finally:
         await file.close()
+
+
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
