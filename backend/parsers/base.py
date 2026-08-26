@@ -2,7 +2,7 @@
 import json
 import re
 from collections import OrderedDict
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Optional
 
 DATE_FORMAT = "%d.%m.%Y"
 DATE_RE = re.compile(r"\d{2}\.\d{2}\.\d{4}")
@@ -33,8 +33,18 @@ def ddmmyy_to_iso(date_value: str) -> str:
     return f"{normalized_year}-{month}-{day}"
 
 
-def transaction(date_value: str, description: str, amount: float) -> Dict[str, Any]:
-    return {"date": date_value, "description": description, "amount": amount}
+def transaction(
+    date_value: str,
+    description: str,
+    amount: float,
+    metadata: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "date": date_value,
+        "description": description,
+        "amount": amount,
+        "metadata": metadata,
+    }
 
 
 def load_rules(rules_path: str):

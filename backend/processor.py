@@ -16,7 +16,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SPREADSHEET_ID = "1JlIH41lNNVPEa3WJa9E7mZP5q3yY5YHm52vdJVK2PnI"
 # TODO Change back to "Expenses Override"
 SHEET_NAME = "Expenses Override Test"
-NUM_COLUMNS = 5  # Purchase Date, Item, Amount, Category, Needs Review
+NUM_COLUMNS = 6  # Purchase Date, Item, Amount, Category, Needs Review, Meta
 
 WORK_DIR = Path("./output")
 
@@ -60,7 +60,7 @@ def append_rows(sheets_service, rows: list[list]):
         .values()
         .append(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{SHEET_NAME}!A1:E1",
+            range=f"{SHEET_NAME}!A1:F1",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": rows},
@@ -199,6 +199,8 @@ def process_and_track_statement(
             transaction["description"],
             -transaction["amount"],
             category or "",
+            "",
+            transaction.get("metadata") or "",
         ]
         (expense_rows if category else review_rows).append(row)
     rows_added = append_rows(sheets_service, expense_rows + review_rows)

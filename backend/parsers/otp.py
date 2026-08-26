@@ -3,7 +3,32 @@ from datetime import datetime
 
 import fitz
 
-from .base import AMOUNT_RE, DATE_FORMAT, DATE_RE, compact_text, parse_amount, transaction, word_text, words_in_column
+from .base import (
+	AMOUNT_RE,
+	DATE_FORMAT,
+	DATE_RE,
+	compact_text,
+	parse_amount,
+	transaction,
+	word_text,
+	words_in_column,
+)
+
+
+def recipient_metadata(words):
+	for word in words_in_column(words, 150, 285):
+		if word[4] != "Prejemnik:":
+			continue
+		line_words = [
+			line_word
+			for line_word in words_in_column(words, 150, 285)
+			if abs(line_word[1] - word[1]) < 1
+		]
+		line_words.sort(key=lambda line_word: line_word[0])
+		line = word_text(line_words)
+		if line != "Prejemnik:":
+			return line
+	return None
 
 
 def extract_transactions(pdf_bytes: bytes):
@@ -44,10 +69,11 @@ def extract_transactions(pdf_bytes: bytes):
 					amount = abs(parse_amount(credit.group()))
 				else:
 					continue
+				metadata = recipient_metadata(block)
 				description_words = words_in_column(block, 440, 594)
 				description_words.sort(key=lambda word: (word[1], word[0]))
 				transactions.append(transaction(
-					transaction_date, word_text(description_words), amount
+					transaction_date, word_text(description_words), amount, metadata
 				))
 	finally:
 		document.close()
