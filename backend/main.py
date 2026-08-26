@@ -6,7 +6,9 @@ Run locally with:
 This service is intended for a private or trusted network. It has no login
 endpoint or application-level authentication.
 """
+import logging
 import os
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 import google.auth
@@ -14,6 +16,12 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 from . import processor
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+log = logging.getLogger(__name__)
 
 app = FastAPI(title="Expense Tracker API")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
@@ -23,11 +31,14 @@ SCOPES = processor.SCOPES
 def _sheets_service():
     credentials_path = os.getenv("SERVICE_ACCOUNT_FILE")
     if credentials_path:
+        log.info("Loading Sheets credentials from configured file path")
         credentials = service_account.Credentials.from_service_account_file(
             credentials_path, scopes=SCOPES
         )
     else:
+        log.info("Loading Sheets credentials from Cloud Run Application Default Credentials")
         credentials, _project_id = google.auth.default(scopes=SCOPES)
+    log.info("Building Google Sheets API client")
     return build("sheets", "v4", credentials=credentials)
 
 
@@ -36,29 +47,58 @@ async def upload_statement(
     file: UploadFile = File(...),
     parser_type: str = Form(...),
 ):
+    request_id = str(uuid4())
+    filename = file.filename or ""
+    log.info(
+        "Statement upload started request_id=%s parser_type=%s filename=%s",
+        request_id,
+        parser_type,
+        filename,
+    )
     if parser_type not in ALLOWED_PARSERS:
+        log.warning("Statement rejected request_id=%s reason=unsupported_parser", request_id)
         raise HTTPException(status_code=400, detail="Unsupported parser type")
-    if not (file.filename or "").lower().endswith(".pdf"):
+    if not filename.lower().endswith(".pdf"):
+        log.warning("Statement rejected request_id=%s reason=not_pdf", request_id)
         raise HTTPException(status_code=400, detail="A PDF statement is required")
 
     try:
+        log.info("Reading PDF request_id=%s max_bytes=%d", request_id, MAX_UPLOAD_BYTES)
         pdf_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+        log.info("PDF read request_id=%s bytes=%d", request_id, len(pdf_bytes))
         if len(pdf_bytes) > MAX_UPLOAD_BYTES:
+            log.warning("Statement rejected request_id=%s reason=too_large", request_id)
             raise HTTPException(status_code=413, detail="Uploaded file is too large")
         if len(pdf_bytes) < 4 or pdf_bytes[:4] != b"%PDF":
+            log.warning("Statement rejected request_id=%s reason=invalid_pdf_header", request_id)
             raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF")
 
+        log.info("Processing statement request_id=%s parser_type=%s", request_id, parser_type)
         result = processor.process_and_track_statement(
             parser_type,
             pdf_bytes,
             _sheets_service(),
         )
+        log.info(
+            "Statement upload completed request_id=%s rows_added=%s duplicates_removed=%s",
+            request_id,
+            result.get("rows_added"),
+            result.get("duplicates_removed"),
+        )
         return result
-    except HTTPException:
+    except HTTPException as error:
+        log.warning(
+            "Statement failed request_id=%s status_code=%d detail=%s",
+            request_id,
+            error.status_code,
+            error.detail,
+        )
         raise
     except FileNotFoundError as error:
+        log.exception("Statement failed request_id=%s reason=missing_file", request_id)
         raise HTTPException(status_code=500, detail="Backend configuration is incomplete") from error
     except Exception as error:
+        log.exception("Statement failed request_id=%s reason=unexpected_error", request_id)
         raise HTTPException(status_code=500, detail="Statement processing failed") from error
     finally:
         await file.close()
