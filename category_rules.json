@@ -1,0 +1,16 @@
+{
+  "Subscriptions": ["apple.com/bill", "hbomax", "google one", "komoot", "netflix", "spotify", "youtube premium", "disney"],
+  "Groceries": ["mueller", "leclerc", "lidl", "interspar", "spar", "eurospin", "hofer", "mercator", "tus", "asia supermarket"],
+  "Bills": ["STROŠEK SMS OBVEŠČANJE", "VODENJE EB", "MESEČNI STROŠKI VODENJA OSEBNEGA RAČUNA", "PLAČILO RAČUNA", "tree capital", "a1 slovenija", "matic sanabor", "telekom", "elektro", "energija", "provizija", "str vod. paketa", "vodovod", "komunala"],
+  "Food & Drink": ["Azijska restvaracija", "matcha", "mcdonalds", "pizzerija", "picerija", "living room", "bevog", "wolt", "frida", "bestero", "colnarna", "gins-bar", "bar-lounge", "kavarna", "restavracija", "pizzeria", "lokalpatriot"],
+  "Health & Wellbeing": ["della spina", "tenis center", "zavod sport", "strizenje", "lekarna", "synevo", "optika", "fizioterapija"],
+  "Transport": ["petrol", "omv", "bs mol", "easypark", "lpp", "shell", "avtocesta", "autocesta", "dionica", "arriva", "taxi", "cestnina"],
+  "Shopping": ["tengo tennis", "MASS", "stradivarius", "decathlon","ugreen", "temu.com", "meller", "care of carl", "office shoes", "hervis", "playstation", "pact", "amzn", "merkur", "zara", "tedi", "about you", "primark", "zajo", "reserved", "sportisimo", "hm ", "h&m"],
+  "Travel": ["ESHOP.SZ.SI", "ryanair", "booking.com", "zavarovalnica sava", "amzs", "wizzair", "airbnb", "camping", "hostel", "hotel"],
+  "Other": ["dvig gotovine", "bankomat", "eventim"],
+  "Photography": ["foto studio rozman", "fotoimpex", "fotoklik", "foto-klik"],
+  "Cycling": ["WEITELIDHWS", "bike24", "mtbiker", "r2 handels", "veb company", "extreme vital", "tradeinn", "bike-discount", "bike-components", "bikester", "chainreactioncycles", "wiggle", "GOBIK", "WWW.VALY.SI"],
+  "Business": ["gls slovenija", "posta 1111"],
+  "Gifts": [],
+  "Hobbies": ["svet metraze"]
+}
