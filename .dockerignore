@@ -1,0 +1,10 @@
+.git
+.venv
+__pycache__/
+*.py[cod]
+*.PDF
+*.pdf
+output/
+service_account.json
+.env*
+frontend/

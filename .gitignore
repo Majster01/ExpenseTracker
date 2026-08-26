@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+service_account.json
+*.PDF
+*.pdf
+output/
+*.csv
+processed_statements.json
