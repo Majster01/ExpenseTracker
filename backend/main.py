@@ -29,6 +29,7 @@ from googleapiclient.discovery import build
 from pydantic import BaseModel
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from urllib import parse, request as url_request
+from urllib.error import HTTPError
 
 from . import processor
 
@@ -44,7 +45,7 @@ ALLOWED_PARSERS = {"nlb", "otp"}
 SCOPES = processor.SCOPES
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://majster01.github.io")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://expensetracker-git-178545711969.europe-west1.run.app")
 SESSION_COOKIE = "expense_session"
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(30 * 24 * 60 * 60)))
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "expense_tracker_oauth")
@@ -53,7 +54,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 _firestore_client = None
 ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000,https://majster01.github.io").split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000,https://expensetracker-git-178545711969.europe-west1.run.app").split(",")
     if origin.strip()
 ]
 
@@ -112,6 +113,18 @@ def _oauth_token_request(values: dict[str, str]) -> dict:
     try:
         with url_request.urlopen(http_request, timeout=15) as result:
             payload = json.loads(result.read().decode())
+    except HTTPError as error:
+        try:
+            error_payload = json.loads(error.read().decode())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            error_payload = {}
+        log.warning(
+            "OAuth token request failed status=%s error=%s description=%s",
+            error.code,
+            error_payload.get("error", "unknown"),
+            error_payload.get("error_description", "none"),
+        )
+        raise HTTPException(status_code=401, detail="Google authorization failed") from error
     except Exception as error:
         log.warning("OAuth token request failed reason=%s", type(error).__name__)
         raise HTTPException(status_code=401, detail="Google authorization failed") from error

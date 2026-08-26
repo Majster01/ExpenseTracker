@@ -5,7 +5,7 @@ substitutions:
   _IMAGE: api
   _GOOGLE_CLIENT_ID: replace-with-google-client-id
   _ALLOWED_ORIGINS: https://replace-with-frontend-origin
-  _GOOGLE_REDIRECT_URI: https://replace-with-frontend-origin
+  _GOOGLE_REDIRECT_URI: https://expensetracker-git-178545711969.europe-west1.run.app
 
 steps:
   - name: gcr.io/cloud-builders/docker
