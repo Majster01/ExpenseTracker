@@ -86,6 +86,8 @@
     return refreshPromise;
   };
 
+  const restoreSession = () => refreshSession().catch(() => {});
+
   const handleCodeResponse = async (response) => {
     if (response.error) {
       loginReject?.(new Error('Google sign-in was not completed.'));
@@ -156,7 +158,7 @@
     }
     loginWithCode().catch((error) => setMessage(uploadMessage, error.message, true));
   });
-  refreshSession().catch(() => {});
+  window.addEventListener('pageshow', restoreSession);
   initializeGoogle();
 
   form.addEventListener('submit', async (event) => {
