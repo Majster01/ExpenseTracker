@@ -1,0 +1,10 @@
+<section class="panel result-panel" id="result-panel"{% if not show %} hidden{% endif %}>
+  <div class="panel-heading"><div><p class="panel-kicker">03 / Complete</p><h2>Import summary</h2></div><span class="success-dot">●</span></div>
+  <div class="results-grid">
+    <div class="metric"><strong id="added-count">{{ rows_added|default(0) }}</strong><span>added to sheet</span></div>
+    <div class="metric review"><strong id="review-count">{{ needs_categorization|default(0) }}</strong><span>need review</span></div>
+  </div>
+  <a class="sheet-button" id="sheet-link" href="{{ sheet_url|default('#') }}" target="_blank" rel="noreferrer"><span>▣</span> Review New Expenses <span>↗</span></a>
+  <button class="secondary-button" type="button" id="another-button"
+    hx-get="/statements/new" hx-target="#workspace" hx-swap="innerHTML">Upload another statement</button>
+</section>

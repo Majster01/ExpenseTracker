@@ -17,9 +17,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import Cookie, FastAPI, File, Form, Header, HTTPException, Path, Response, UploadFile
+from fastapi import Cookie, FastAPI, File, Form, Header, HTTPException, Path, Request, Response, UploadFile
+from fastapi.exception_handlers import http_exception_handler as default_http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from google.auth.transport.requests import Request as GoogleRequest
 from google.auth.exceptions import RefreshError
 from google.oauth2 import id_token
@@ -41,11 +43,16 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 app = FastAPI(title="Expense Tracker API")
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 ALLOWED_PARSERS = {"nlb", "otp"}
 SCOPES = processor.SCOPES
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+SHEET_URL = os.getenv(
+    "SHEET_URL",
+    "https://docs.google.com/spreadsheets/d/1JlIH41lNNVPEa3WJa9E7mZP5q3yY5YHm52vdJVK2PnI/edit?gid=1091925467#gid=1091925467",
+)
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://expensetracker-git-178545711969.europe-west1.run.app")
 SESSION_COOKIE = "expense_session"
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(30 * 24 * 60 * 60)))
@@ -81,10 +88,23 @@ class OAuthCodeRequest(BaseModel):
 class RuleRequest(BaseModel):
     keywords: list[str]
     order: int
+    original_category: Optional[str] = None
 
 
 class CategoryRequest(BaseModel):
     category: str
+
+
+def _wants_html(hx_request) -> bool:
+    """True only for a real htmx-initiated request.
+
+    Route handlers are also called directly (without going through FastAPI's
+    request handling) by unit tests in tests/test_main.py, which never pass
+    this argument. In that case its value is the raw `Header(...)` marker
+    object rather than a string, so the isinstance check keeps those calls on
+    the original JSON code path.
+    """
+    return isinstance(hx_request, str) and bool(hx_request)
 
 
 def _get_firestore():
@@ -267,14 +287,25 @@ def login(
 def refresh_access_token(
     response: Response,
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
 ):
     session = _get_session(session_id)
     token_payload = _refresh_google_access_token(session["subject"])
+    is_admin = session.get("email", "").lower() in ADMIN_EMAILS
+    if _wants_html(hx_request):
+        # A returned Response (the TemplateResponse) replaces the injected
+        # `response` entirely, so cookies/headers must be set on it directly
+        # rather than on `response` -- mutating `response` here would be silently discarded.
+        template_response = templates.TemplateResponse(http_request, "partials/topbar.html", {"state": "signed_in"})
+        _set_session_cookie(template_response, session_id)
+        template_response.headers["HX-Trigger"] = "auth-changed"
+        return template_response
     _set_session_cookie(response, session_id)
     return {
         "access_token": token_payload["access_token"],
         "expires_in": token_payload.get("expires_in", 3600),
-        "is_admin": session.get("email", "").lower() in ADMIN_EMAILS,
+        "is_admin": is_admin,
     }
 
 
@@ -282,9 +313,16 @@ def refresh_access_token(
 def logout(
     response: Response,
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
 ):
     if session_id:
         _get_firestore().collection(FIRESTORE_COLLECTION).document(f"session:{session_id}").delete()
+    if _wants_html(hx_request):
+        template_response = templates.TemplateResponse(http_request, "partials/topbar.html", {"state": "signed_out"})
+        template_response.delete_cookie(SESSION_COOKIE)
+        template_response.headers["HX-Trigger"] = "auth-changed"
+        return template_response
     response.delete_cookie(SESSION_COOKIE)
 
 
@@ -397,9 +435,16 @@ def _sync_category_to_sheets(sheets_service, category: str) -> None:
 
 
 @app.get("/rules")
-def list_rules(session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
+def list_rules(
+    session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
+):
     _require_admin(session_id)
-    return {"rules": _rules_repository().list_rules()}
+    rules = _rules_repository().list_rules()
+    if _wants_html(hx_request):
+        return templates.TemplateResponse(http_request, "partials/rules_section.html", {"rules": rules})
+    return {"rules": rules}
 
 
 @app.post("/categories")
@@ -407,6 +452,8 @@ def create_category(
     request: CategoryRequest,
     authorization: Optional[str] = Header(default=None),
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
 ):
     _require_admin(session_id)
     category = _validate_category(request.category)
@@ -419,12 +466,19 @@ def create_category(
     )
     if existing_category is not None:
         _sync_category_to_sheets(sheets_service, existing_category)
-        return {"category": existing_category, "order": list(rules).index(existing_category), "created": False}
+        result = {"category": existing_category, "order": list(rules).index(existing_category), "created": False}
+    else:
+        order = len(rules)
+        _sync_category_to_sheets(sheets_service, category)
+        repository.save(category, [], order)
+        result = {"category": category, "order": order, "created": True}
 
-    order = len(rules)
-    _sync_category_to_sheets(sheets_service, category)
-    repository.save(category, [], order)
-    return {"category": category, "order": order, "created": True}
+    if _wants_html(hx_request):
+        message = "Category already exists." if not result["created"] else "Category added."
+        return templates.TemplateResponse(
+            http_request, "partials/rules_section.html", {"rules": repository.list_rules(), "message": message}
+        )
+    return result
 
 
 @app.put("/rules/{category}")
@@ -432,11 +486,23 @@ def save_rule(
     request: RuleRequest,
     category: str = Path(..., min_length=1, max_length=80),
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
 ):
     _require_admin(session_id)
     category = _validate_category(category)
     keywords = _validate_rule_request(request)
-    _rules_repository().save(category, keywords, request.order)
+    repository = _rules_repository()
+    if request.original_category and request.original_category != category:
+        repository.delete(_validate_category(request.original_category))
+    repository.save(category, keywords, request.order)
+
+    if _wants_html(hx_request):
+        return templates.TemplateResponse(
+            http_request,
+            "partials/rules_section.html",
+            {"rules": repository.list_rules(), "message": "Category rule saved."},
+        )
     return {"category": category, "keywords": [keyword.lower() for keyword in keywords], "order": request.order}
 
 
@@ -444,9 +510,18 @@ def save_rule(
 def delete_rule(
     category: str = Path(..., min_length=1, max_length=80),
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
 ):
     _require_admin(session_id)
-    _rules_repository().delete(_validate_category(category))
+    repository = _rules_repository()
+    repository.delete(_validate_category(category))
+    if _wants_html(hx_request):
+        return templates.TemplateResponse(
+            http_request,
+            "partials/rules_section.html",
+            {"rules": repository.list_rules(), "message": "Category rule deleted."},
+        )
 
 
 @app.post("/statements")
@@ -455,6 +530,8 @@ async def upload_statement(
     parser_type: str = Form(...),
     authorization: Optional[str] = Header(default=None),
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
+    http_request: Request = None,
 ):
     request_id = str(uuid4())
     sheets_service = _require_google_user(authorization, session_id)
@@ -495,6 +572,17 @@ async def upload_statement(
             result.get("rows_added"),
             result.get("duplicates_removed"),
         )
+        if _wants_html(hx_request):
+            return templates.TemplateResponse(
+                http_request,
+                "partials/result_panel.html",
+                {
+                    "show": True,
+                    "rows_added": result.get("rows_added", 0),
+                    "needs_categorization": result.get("needs_categorization", 0),
+                    "sheet_url": SHEET_URL,
+                },
+            )
         return result
     except HTTPException as error:
         log.warning(
@@ -512,6 +600,48 @@ async def upload_statement(
         raise HTTPException(status_code=500, detail="Statement processing failed") from error
     finally:
         await file.close()
+
+
+@app.exception_handler(HTTPException)
+async def htmx_aware_http_exception_handler(request: Request, exc: HTTPException):
+    if request.headers.get("HX-Request"):
+        if request.url.path.startswith("/statements"):
+            return templates.TemplateResponse(
+                request,
+                "partials/upload_panel.html",
+                {"message": exc.detail, "error": True},
+                status_code=exc.status_code,
+            )
+        if request.url.path.startswith("/auth/"):
+            return templates.TemplateResponse(
+                request, "partials/topbar.html", {"state": "signed_out"}, status_code=exc.status_code
+            )
+        try:
+            rules = _rules_repository().list_rules()
+        except Exception:
+            log.exception("Could not load rules while rendering an htmx error fragment")
+            rules = []
+        return templates.TemplateResponse(
+            request,
+            "partials/rules_section.html",
+            {"rules": rules, "message": exc.detail, "error": True},
+            status_code=exc.status_code,
+        )
+    return await default_http_exception_handler(request, exc)
+
+
+@app.get("/")
+def index(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {"google_client_id": GOOGLE_CLIENT_ID, "sheet_url": SHEET_URL, "rules": [], "message": ""},
+    )
+
+
+@app.get("/statements/new")
+def new_statement_form(request: Request):
+    return templates.TemplateResponse(request, "partials/upload_panel.html", {"message": ""})
 
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

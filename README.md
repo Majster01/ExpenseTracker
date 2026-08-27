@@ -144,12 +144,50 @@ curl http://localhost:8080/docs
 
 ## Project layout
 
-`backend/` contains the API entry point, processor, and bank parser modules.
-`frontend/` contains the static PWA served by the same Cloud Run service. Set
-the `googleClientId` value in `frontend/config.js` to the Web OAuth client ID
-before deploying. `apiBaseUrl` is intentionally empty so the browser uses the
-same origin; the spreadsheet link is configured in the same file.
+`backend/` contains the API entry point, processor, bank parser modules, and
+the Jinja2 templates (`backend/templates/`) that render the htmx-driven PWA
+shell and its HTML fragments. `frontend/` contains the built static assets
+served by the same Cloud Run service: `frontend/static/css/app.css` (built
+from `frontend/tailwind/input.css`, see "Frontend styling" below),
+`frontend/static/js/` (vendored htmx plus the small `auth.js`/`rules.js`
+scripts), and the PWA manifest/icon/service worker. The Web OAuth client ID is
+read from the `GOOGLE_CLIENT_ID` environment variable (the same one used for
+the login endpoints) and injected into the page server-side; there is no
+separate frontend config file. `SHEET_URL` optionally overrides the "Review
+New Expenses" link if it should differ from the default spreadsheet URL.
 Runtime data and generated CSV files remain at the project root.
+
+## Frontend styling
+
+The stylesheet is built with Tailwind's standalone CLI (no Node/npm
+required). One-time setup: download the `tailwindcss` binary for your
+platform from the
+[tailwindcss releases page](https://github.com/tailwindlabs/tailwindcss/releases)
+into `.tailwind/tailwindcss` and `chmod +x` it. After changing any class in
+`backend/templates/**` or `frontend/tailwind/input.css`, rebuild the CSS and
+commit the result — nothing rebuilds it automatically in Docker/Cloud Build:
+
+```sh
+./scripts/build-css.sh
+```
+
+## UI regression checks
+
+`scripts/ui_check.py` is a small Playwright-based harness for catching UI
+regressions locally (no test framework, just a CLI script). It requires the
+API running locally (`./run_api.sh`) and the dev dependencies installed
+(`pip install -r requirements-dev.txt && python -m playwright install
+chromium`):
+
+```sh
+scripts/ui_check.py auth                                   # one-time manual Google login, saves the session
+scripts/ui_check.py capture --out scripts/ui_check/baseline # screenshot mobile/desktop, logged-out/in
+scripts/ui_check.py capture --out scripts/ui_check/current
+scripts/ui_check.py diff                                    # pixel-diff current/ against baseline/
+```
+
+The authenticated capture only runs if a saved session exists; without one,
+only the logged-out shell is checked.
 
 ## Legacy GitHub Pages deployment
 
@@ -159,8 +197,9 @@ for the mobile PWA after enabling the combined-service trigger.
 
 Create a Google OAuth Web client and add the final Cloud Run/custom-domain
 origin to its authorized JavaScript origins. Configure the OAuth consent screen
-and enable the Google Sheets API. Set the same client ID in
-`frontend/config.js` and the Cloud Run `_GOOGLE_CLIENT_ID` substitution.
+and enable the Google Sheets API. Set the Cloud Run `_GOOGLE_CLIENT_ID`
+substitution, which the backend both uses for the login endpoints and injects
+into the rendered page for the frontend's Google Identity Services client.
 `_ALLOWED_ORIGINS` and `_GOOGLE_REDIRECT_URI` must use that same origin. For the
 popup authorization-code flow, the backend exchanges the code using that exact
 origin as `redirect_uri`.

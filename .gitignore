@@ -9,3 +9,7 @@ service_account.json
 output/
 *.csv
 processed_statements.json
+scripts/ui_check/.auth/
+scripts/ui_check/baseline/
+scripts/ui_check/current/
+.tailwind/

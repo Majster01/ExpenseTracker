@@ -1,0 +1,18 @@
+<div class="rule-row" data-order="{{ rule.order }}" data-original-category="{{ rule.category }}">
+  <div class="rule-row-heading">
+    <input class="rule-category" value="{{ rule.category }}" aria-label="Category name">
+    <button class="delete-rule" type="button"
+      hx-delete="/rules/{{ rule.category | urlencode }}" hx-confirm="Delete {{ rule.category }}?"
+      hx-target="#rules-panel-body" hx-swap="innerHTML">Delete</button>
+  </div>
+  <label class="field-label">Keywords <span class="field-hint">Type a keyword and press Enter</span></label>
+  <div class="keyword-editor">
+    <div class="keyword-tags">
+      {% for keyword in rule.keywords %}
+      <span class="keyword-tag" data-keyword="{{ keyword }}"><span>{{ keyword }}</span><button type="button" class="remove-keyword" aria-label="Remove {{ keyword }}">×</button></span>
+      {% endfor %}
+    </div>
+    <input class="keyword-input" type="text" placeholder="Add a keyword" aria-label="Add keyword">
+  </div>
+  <button class="primary-button save-rule" type="button">Save category <span>→</span></button>
+</div>

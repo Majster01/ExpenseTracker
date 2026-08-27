@@ -34,6 +34,18 @@ class MainAuthTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 422)
         repository.return_value.save.assert_not_called()
 
+    def test_save_rule_renames_category_by_deleting_original_first(self):
+        with patch.object(main, "_require_admin"), patch.object(main, "_rules_repository") as repository:
+            repository.return_value.list_rules.return_value = []
+            main.save_rule(
+                main.RuleRequest(keywords=["wolt"], order=0, original_category="OldName"),
+                "NewName",
+                "session-id",
+            )
+
+        repository.return_value.delete.assert_called_once_with("OldName")
+        repository.return_value.save.assert_called_once_with("NewName", ["wolt"], 0)
+
     def test_google_error_reason_extracts_reason_without_response_dump(self):
         error = HttpError(
             Mock(status=403),

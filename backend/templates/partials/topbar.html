@@ -1,0 +1,16 @@
+<header class="topbar" id="topbar">
+  <div class="brand"><span class="brand-mark">ET</span><span>Expense Tracker</span></div>
+  <div class="user-actions">
+    {% if state == "signed_in" %}
+    <div id="user-status" class="user-status signed-in" aria-live="polite">Signed in with Google</div>
+    <button id="auth-button" class="auth-button" type="button"
+      hx-post="/auth/logout" hx-swap="outerHTML" hx-target="#topbar">Sign out</button>
+    {% elif state == "signed_out" %}
+    <div id="user-status" class="user-status" aria-live="polite">Not signed in</div>
+    <button id="auth-button" class="auth-button" type="button">Sign in</button>
+    {% else %}
+    <div id="user-status" class="user-status" aria-live="polite">Restoring session...</div>
+    <button id="auth-button" class="auth-button" type="button" disabled>Restoring...</button>
+    {% endif %}
+  </div>
+</header>

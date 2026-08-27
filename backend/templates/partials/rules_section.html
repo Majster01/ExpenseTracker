@@ -1,0 +1,14 @@
+<p class="muted">Rules are checked in order. The first matching category wins.</p>
+<div id="rules-list">
+  {% for rule in rules|default([]) %}
+  {% include "partials/rule_row.html" %}
+  {% endfor %}
+</div>
+<form class="category-create" id="category-create-form">
+  <label class="field-label" for="new-category">New category</label>
+  <div class="category-create-controls">
+    <input id="new-category" name="category" type="text" maxlength="80" placeholder="Category name" required>
+    <button class="secondary-button" type="submit">Add category</button>
+  </div>
+</form>
+<p id="rules-message" class="form-message{% if error %} error{% endif %}" role="alert">{{ message|default('') }}</p>

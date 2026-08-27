@@ -1,5 +1,5 @@
-const CACHE = 'expense-tracker-shell-v3';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './config.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'expense-tracker-shell-v4';
+const SHELL = ['./', './static/css/app.css', './static/js/htmx.min.js', './static/js/auth.js', './static/js/rules.js', './manifest.webmanifest', './icon.svg'];
 self.addEventListener('install', event => event.waitUntil(
   caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())
 ));

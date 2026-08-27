@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102a43">
+  <meta name="description" content="Upload bank statements and review new expenses.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <title>{% block title %}Expense Tracker{% endblock %}</title>
+</head>
+<body>
+  <div id="auth-poller" style="display:none"
+    hx-post="/auth/refresh" hx-trigger="load, auth-changed from:body, every 45m"
+    hx-target="#topbar" hx-swap="outerHTML"></div>
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+  <script>window.EXPENSE_CONFIG = { googleClientId: {{ (google_client_id or '')|tojson }} };</script>
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/static/js/auth.js"></script>
+  <script src="/static/js/rules.js"></script>
+  <script>
+    function onStatementFileChange(input) {
+      const form = input.closest('form');
+      form.querySelector('#file-label').textContent = input.files[0] ? input.files[0].name : 'Select a PDF statement';
+      form.querySelector('#upload-button').disabled = !input.files.length;
+    }
+    document.body.addEventListener('htmx:beforeSwap', function (event) {
+      if (event.detail.xhr.status >= 400) {
+        event.detail.shouldSwap = true;
+        event.detail.isError = false;
+      }
+    });
+  </script>
+</body>
+</html>

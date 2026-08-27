@@ -1,0 +1,21 @@
+<form class="panel upload-panel" id="upload-form"
+  hx-post="/statements" hx-encoding="multipart/form-data"
+  hx-target="#workspace" hx-swap="innerHTML show:#workspace:top">
+  <div class="panel-heading">
+    <div><p class="panel-kicker">Import</p><h2>Choose a statement</h2></div>
+    <span class="file-limit">PDF / 10 MB</span>
+  </div>
+  <label class="field-label" for="parser-type">Bank parser</label>
+  <select id="parser-type" name="parser_type">
+    <option value="nlb">NLB</option>
+    <option value="otp">OTP</option>
+  </select>
+  <label class="dropzone" for="statement-file" id="dropzone">
+    <span class="upload-icon" id="upload-indicator">↑</span>
+    <strong id="file-label">Select a PDF statement</strong>
+    <span>Tap to browse files</span>
+    <input id="statement-file" name="file" type="file" accept="application/pdf,.pdf" required onchange="onStatementFileChange(this)">
+  </label>
+  <button class="primary-button" type="submit" id="upload-button" disabled hx-indicator="#upload-indicator">Process statement <span>→</span></button>
+  <p id="upload-message" class="form-message{% if error %} error{% endif %}" role="alert">{{ message|default('') }}</p>
+</form>
