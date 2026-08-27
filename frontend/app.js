@@ -84,12 +84,31 @@
 
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 
+  const addKeyword = (row, value) => {
+    const keyword = value.trim();
+    if (!keyword || [...row.querySelectorAll('.keyword-tag')].some(tag => tag.dataset.keyword.toLowerCase() === keyword.toLowerCase())) return;
+    const tag = document.createElement('span');
+    tag.className = 'keyword-tag';
+    tag.dataset.keyword = keyword;
+    tag.innerHTML = `<span>${escapeHtml(keyword)}</span><button type="button" class="remove-keyword" aria-label="Remove ${escapeHtml(keyword)}">×</button>`;
+    tag.querySelector('.remove-keyword').addEventListener('click', () => tag.remove());
+    row.querySelector('.keyword-tags').append(tag);
+  };
+
   const renderRule = (rule) => {
     const row = document.createElement('div');
     row.className = 'rule-row';
     row.dataset.order = rule.order;
     row.dataset.originalCategory = rule.category;
-    row.innerHTML = `<div class="rule-row-heading"><input class="rule-category" value="${escapeHtml(rule.category)}" aria-label="Category name"><button class="delete-rule" type="button">Delete</button></div><label class="field-label">Keywords, one per line</label><textarea class="rule-keywords" rows="3">${escapeHtml(rule.keywords.join('\n'))}</textarea><button class="primary-button save-rule" type="button">Save category <span>→</span></button>`;
+    row.innerHTML = `<div class="rule-row-heading"><input class="rule-category" value="${escapeHtml(rule.category)}" aria-label="Category name"><button class="delete-rule" type="button">Delete</button></div><label class="field-label">Keywords <span class="field-hint">Type a keyword and press Enter</span></label><div class="keyword-editor"><div class="keyword-tags"></div><input class="keyword-input" type="text" placeholder="Add a keyword" aria-label="Add keyword"></div><button class="primary-button save-rule" type="button">Save category <span>→</span></button>`;
+    const keywordInput = row.querySelector('.keyword-input');
+    keywordInput.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      addKeyword(row, keywordInput.value);
+      keywordInput.value = '';
+    });
+    rule.keywords.forEach(keyword => addKeyword(row, keyword));
     row.querySelector('.save-rule').addEventListener('click', () => saveRule(row).catch(error => setMessage(rulesMessage, error.message, true)));
     row.querySelector('.delete-rule').addEventListener('click', () => deleteRule(row).catch(error => setMessage(rulesMessage, error.message, true)));
     return row;
@@ -104,7 +123,7 @@
 
   const saveRule = async (row) => {
     const category = row.querySelector('.rule-category').value.trim();
-    const keywords = row.querySelector('.rule-keywords').value.split('\n').map(value => value.trim()).filter(Boolean);
+    const keywords = [...row.querySelectorAll('.keyword-tag')].map(tag => tag.dataset.keyword);
     setMessage(rulesMessage, 'Saving rules...');
     const originalCategory = row.dataset.originalCategory;
     if (originalCategory !== category) {

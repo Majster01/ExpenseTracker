@@ -31,6 +31,7 @@ h2 { font-size: 22px; }
 .form-message.error { color: var(--coral); }
 .file-limit { padding: 6px 8px; color: var(--teal); background: #e3f1ef; border-radius: 4px; font-size: 11px; font-weight: 700; }
 .field-label { margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.field-hint { margin-left: 6px; font-weight: 400; }
 select { width: 100%; padding: 13px 14px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
 .dropzone { display: grid; place-items: center; gap: 7px; min-height: 156px; margin: 16px 0; padding: 20px; color: var(--muted); background: #f8fbfa; border: 1px dashed #8bb8b5; border-radius: 6px; text-align: center; cursor: pointer; }
 .dropzone:hover, .dropzone:focus-within { background: #eef8f6; border-color: var(--teal); }
@@ -57,8 +58,14 @@ button, .sheet-button { border: 0; border-radius: 5px; font: 600 14px 'DM Sans',
 .compact-button { width: auto; margin: 0; padding: 9px 12px; }
 .rule-row { padding: 16px 0; border-top: 1px solid var(--line); }
 .rule-row-heading { display: flex; gap: 10px; margin-bottom: 12px; }
-.rule-category, .rule-keywords { width: 100%; padding: 11px 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
-.rule-keywords { display: block; resize: vertical; line-height: 1.5; }
+.rule-category { width: 100%; padding: 11px 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+.keyword-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; padding: 7px 9px; background: white; border: 1px solid var(--line); border-radius: 5px; }
+.keyword-editor:focus-within { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(8, 127, 140, .12); }
+.keyword-tags { display: contents; }
+.keyword-tag { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 7px 9px 7px 11px; color: #70a8e5; background: #062d58; border-radius: 999px; font-size: 13px; }
+.keyword-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remove-keyword { display: grid; place-items: center; width: 17px; height: 17px; padding: 0; color: #70a8e5; background: transparent; border: 0; font-size: 17px; line-height: 1; cursor: pointer; }
+.keyword-input { flex: 1 1 150px; min-width: 130px; padding: 7px 3px; color: var(--ink); background: transparent; border: 0; outline: 0; font: inherit; }
 .delete-rule { flex: 0 0 auto; padding: 8px 10px; color: var(--coral); background: transparent; border: 1px solid #e8b8a8; border-radius: 5px; font: inherit; cursor: pointer; }
 .save-rule { width: auto; margin-top: 10px; padding: 10px 12px; }
 footer { justify-content: space-between; margin-top: 58px; color: #829ab1; font-size: 11px; }
