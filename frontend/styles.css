@@ -59,6 +59,11 @@ button, .sheet-button { border: 0; border-radius: 5px; font: 600 14px 'DM Sans',
 .rule-row { padding: 16px 0; border-top: 1px solid var(--line); }
 .rule-row-heading { display: flex; gap: 10px; margin-bottom: 12px; }
 .rule-category { width: 100%; padding: 11px 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+.category-create { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+.category-create-controls { display: flex; gap: 10px; }
+.category-create-controls input { min-width: 0; flex: 1; padding: 11px 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+.category-create-controls input:focus { outline: 0; border-color: var(--teal); box-shadow: 0 0 0 2px rgba(8, 127, 140, .12); }
+.category-create-controls .secondary-button { width: auto; margin: 0; white-space: nowrap; }
 .keyword-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; padding: 7px 9px; background: white; border: 1px solid var(--line); border-radius: 5px; }
 .keyword-editor:focus-within { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(8, 127, 140, .12); }
 .keyword-tags { display: contents; }
@@ -70,3 +75,4 @@ button, .sheet-button { border: 0; border-radius: 5px; font: 600 14px 'DM Sans',
 .save-rule { width: auto; margin-top: 10px; padding: 10px 12px; }
 footer { justify-content: space-between; margin-top: 58px; color: #829ab1; font-size: 11px; }
 @media (max-width: 700px) { .shell { width: min(100% - 28px, 520px); padding-top: 16px; } .topbar { margin-bottom: 62px; } .workspace { grid-template-columns: 1fr; } .result-panel { grid-column: auto; } .panel { padding: 22px; } h1 { font-size: 2.75rem; } footer { margin-top: 38px; gap: 14px; align-items: flex-start; } }
+@media (max-width: 500px) { .category-create-controls { flex-direction: column; } .category-create-controls .secondary-button { width: 100%; } }

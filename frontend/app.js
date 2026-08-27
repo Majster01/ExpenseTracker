@@ -11,7 +11,8 @@
   const rulesPanel = document.querySelector('#rules-panel');
   const rulesList = document.querySelector('#rules-list');
   const rulesMessage = document.querySelector('#rules-message');
-  const addRuleButton = document.querySelector('#add-rule-button');
+  const categoryCreateForm = document.querySelector('#category-create-form');
+  const newCategoryInput = document.querySelector('#new-category');
   const tokenState = { value: null, expiresAt: 0 };
   const googleSheetsScope = 'https://www.googleapis.com/auth/spreadsheets';
   const googleIdentityScopes = 'openid email profile';
@@ -150,10 +151,28 @@
     await loadRules();
   };
 
-  addRuleButton.addEventListener('click', () => {
-    const row = renderRule({ category: 'New category', keywords: [], order: rulesList.children.length });
-    rulesList.append(row);
-    row.querySelector('.rule-category').select();
+  categoryCreateForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const category = newCategoryInput.value.trim();
+    if (!category) return;
+    const submitButton = categoryCreateForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    setMessage(rulesMessage, 'Adding category...');
+    try {
+      const response = await ruleRequest('/categories', {
+        method: 'POST',
+        body: JSON.stringify({ category }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || 'Could not add category.');
+      newCategoryInput.value = '';
+      setMessage(rulesMessage, payload.created === false ? 'Category already exists.' : 'Category added.');
+      await loadRules();
+    } catch (error) {
+      setMessage(rulesMessage, error.message, true);
+    } finally {
+      submitButton.disabled = false;
+    }
   });
 
   const refreshSession = () => {
