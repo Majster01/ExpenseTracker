@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+  {% include "partials/header.html" %}
+
+  <section class="intro">
+    <p class="eyebrow">Administration</p>
+    <h1>Category rules.</h1>
+    <p class="lede">Rules are checked in order. The first matching category wins.</p>
+  </section>
+
+  <section class="panel rules-panel" id="rules-panel">
+    <div id="rules-panel-body">
+      {% include "partials/rules_section.html" %}
+    </div>
+  </section>
+  <footer><span>Expense Tracker</span><span>Statements stay in the cloud workflow</span></footer>
+{% endblock %}

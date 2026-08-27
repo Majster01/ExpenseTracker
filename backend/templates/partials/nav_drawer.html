@@ -1,0 +1,14 @@
+<div id="nav-backdrop" class="nav-backdrop"></div>
+<nav id="nav-drawer" class="nav-drawer" aria-label="Primary">
+  <div class="nav-drawer-heading">
+    <div class="brand"><span class="brand-mark">ET</span><span>Expense Tracker</span></div>
+    <button id="nav-close" class="nav-close" type="button" aria-label="Close menu">×</button>
+  </div>
+  <a class="nav-link{% if request.url.path == '/' %} active{% endif %}" href="/" hx-boost="true">Home</a>
+  <a class="nav-link{% if request.url.path == '/review' %} active{% endif %}" href="/review" hx-boost="true">Review</a>
+  {% if is_admin %}
+  <p class="nav-section-label">Admin</p>
+  <a class="nav-link{% if request.url.path == '/rules' %} active{% endif %}" href="/rules" hx-boost="true">Rules</a>
+  <a class="nav-link{% if request.url.path == '/settings' %} active{% endif %}" href="/settings" hx-boost="true">Settings</a>
+  {% endif %}
+</nav>

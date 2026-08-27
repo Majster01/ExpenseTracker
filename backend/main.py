@@ -20,6 +20,7 @@ from uuid import uuid4
 from fastapi import Cookie, FastAPI, File, Form, Header, HTTPException, Path, Request, Response, UploadFile
 from fastapi.exception_handlers import http_exception_handler as default_http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from google.auth.transport.requests import Request as GoogleRequest
@@ -402,6 +403,19 @@ def _require_admin(session_id: Optional[str]) -> dict:
     return session
 
 
+def _is_admin(session_id: Optional[str]) -> bool:
+    """Non-raising admin check for pages that only need to know whether to
+    show admin nav links, as opposed to `_require_admin`, which gates access
+    to admin actions and must reject a missing/expired session."""
+    if not session_id:
+        return False
+    try:
+        session = _get_session(session_id)
+    except HTTPException:
+        return False
+    return session.get("email", "").lower() in ADMIN_EMAILS
+
+
 def _rules_repository() -> RulesRepository:
     return RulesRepository(_get_firestore(), collection_name=RULES_COLLECTION)
 
@@ -439,15 +453,15 @@ def _sync_category_to_sheets(sheets_service, category: str) -> None:
 
 @app.get("/rules")
 def list_rules(
+    request: Request,
     session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
-    hx_request: Optional[str] = Header(default=None, alias="HX-Request"),
-    http_request: Request = None,
 ):
-    _require_admin(session_id)
+    try:
+        _require_admin(session_id)
+    except HTTPException:
+        return RedirectResponse("/", status_code=303)
     rules = _rules_repository().list_rules()
-    if _wants_html(hx_request):
-        return templates.TemplateResponse(http_request, "partials/rules_section.html", {"rules": rules})
-    return {"rules": rules}
+    return templates.TemplateResponse(request, "rules.html", {"rules": rules, "is_admin": True})
 
 
 @app.post("/categories")
@@ -634,12 +648,32 @@ async def htmx_aware_http_exception_handler(request: Request, exc: HTTPException
 
 
 @app.get("/")
-def index(request: Request):
+def index(request: Request, session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"google_client_id": GOOGLE_CLIENT_ID, "sheet_url": SHEET_URL, "rules": [], "message": ""},
+        {
+            "google_client_id": GOOGLE_CLIENT_ID,
+            "sheet_url": SHEET_URL,
+            "rules": [],
+            "message": "",
+            "is_admin": _is_admin(session_id),
+        },
     )
+
+
+@app.get("/review")
+def review(request: Request, session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
+    return templates.TemplateResponse(request, "review.html", {"is_admin": _is_admin(session_id)})
+
+
+@app.get("/settings")
+def settings_page(request: Request, session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
+    try:
+        _require_admin(session_id)
+    except HTTPException:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(request, "settings.html", {"is_admin": True})
 
 
 @app.get("/statements/new")

@@ -14,6 +14,7 @@
   <div id="auth-poller" style="display:none"
     hx-post="/auth/refresh" hx-trigger="load, auth-changed from:body, every 45m"
     hx-target="#topbar" hx-swap="outerHTML"></div>
+  {% include "partials/nav_drawer.html" %}
   <main class="shell">
     {% block content %}{% endblock %}
   </main>
@@ -22,6 +23,7 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/static/js/auth.js"></script>
   <script src="/static/js/rules.js"></script>
+  <script src="/static/js/nav.js"></script>
   <script>
     function onStatementFileChange(input) {
       const form = input.closest('form');
