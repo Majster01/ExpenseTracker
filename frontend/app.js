@@ -8,6 +8,10 @@
   const userStatus = document.querySelector('#user-status');
   const authButton = document.querySelector('#auth-button');
   const resultPanel = document.querySelector('#result-panel');
+  const rulesPanel = document.querySelector('#rules-panel');
+  const rulesList = document.querySelector('#rules-list');
+  const rulesMessage = document.querySelector('#rules-message');
+  const addRuleButton = document.querySelector('#add-rule-button');
   const tokenState = { value: null, expiresAt: 0 };
   const googleSheetsScope = 'https://www.googleapis.com/auth/spreadsheets';
   const googleIdentityScopes = 'openid email profile';
@@ -16,6 +20,7 @@
   let refreshPromise = null;
   let loginResolve = null;
   let loginReject = null;
+  let isAdmin = false;
 
   const setAuthenticatedState = (token) => {
     tokenState.value = token;
@@ -36,6 +41,9 @@
   };
 
   const clearAuthentication = async (message = '') => {
+    isAdmin = false;
+    rulesPanel.hidden = true;
+    rulesList.replaceChildren();
     setAuthenticatedState(null);
     tokenState.expiresAt = 0;
     setMessage(uploadMessage, message, Boolean(message));
@@ -61,9 +69,73 @@
     tokenState.value = payload.access_token;
     tokenState.expiresAt = Date.now() + (payload.expires_in * 1000);
     setAuthenticatedState(payload.access_token);
+    isAdmin = Boolean(payload.is_admin);
+    rulesPanel.hidden = !isAdmin;
+    if (isAdmin) loadRules().catch(error => setMessage(rulesMessage, error.message, true));
     window.clearTimeout(refreshTimer);
     refreshTimer = window.setTimeout(() => refreshSession().catch(() => {}), Math.max(1000, payload.expires_in * 1000 - 60000));
   };
+
+  const ruleRequest = (url, options = {}) => fetch(`${config.apiBaseUrl}${url}`, {
+    ...options,
+    credentials: 'include',
+    headers: { ...(options.headers || {}), 'Content-Type': 'application/json' },
+  });
+
+  const escapeHtml = (value) => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+
+  const renderRule = (rule) => {
+    const row = document.createElement('div');
+    row.className = 'rule-row';
+    row.dataset.order = rule.order;
+    row.dataset.originalCategory = rule.category;
+    row.innerHTML = `<div class="rule-row-heading"><input class="rule-category" value="${escapeHtml(rule.category)}" aria-label="Category name"><button class="delete-rule" type="button">Delete</button></div><label class="field-label">Keywords, one per line</label><textarea class="rule-keywords" rows="3">${escapeHtml(rule.keywords.join('\n'))}</textarea><button class="primary-button save-rule" type="button">Save category <span>→</span></button>`;
+    row.querySelector('.save-rule').addEventListener('click', () => saveRule(row).catch(error => setMessage(rulesMessage, error.message, true)));
+    row.querySelector('.delete-rule').addEventListener('click', () => deleteRule(row).catch(error => setMessage(rulesMessage, error.message, true)));
+    return row;
+  };
+
+  const loadRules = async () => {
+    const response = await ruleRequest('/rules');
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.detail || 'Could not load category rules.');
+    rulesList.replaceChildren(...payload.rules.map(renderRule));
+  };
+
+  const saveRule = async (row) => {
+    const category = row.querySelector('.rule-category').value.trim();
+    const keywords = row.querySelector('.rule-keywords').value.split('\n').map(value => value.trim()).filter(Boolean);
+    setMessage(rulesMessage, 'Saving rules...');
+    const originalCategory = row.dataset.originalCategory;
+    if (originalCategory !== category) {
+      const deleteResponse = await ruleRequest(`/rules/${encodeURIComponent(originalCategory)}`, { method: 'DELETE' });
+      if (!deleteResponse.ok) throw new Error('Could not rename category rule.');
+    }
+    const response = await ruleRequest(`/rules/${encodeURIComponent(category)}`, { method: 'PUT', body: JSON.stringify({ keywords, order: Number(row.dataset.order) }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.detail || 'Could not save category rule.');
+    setMessage(rulesMessage, 'Category rule saved.');
+    await loadRules();
+  };
+
+  const deleteRule = async (row) => {
+    const category = row.querySelector('.rule-category').value.trim();
+    if (!category || !window.confirm(`Delete ${category}?`)) return;
+    setMessage(rulesMessage, 'Deleting rule...');
+    const response = await ruleRequest(`/rules/${encodeURIComponent(category)}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || 'Could not delete category rule.');
+    }
+    setMessage(rulesMessage, 'Category rule deleted.');
+    await loadRules();
+  };
+
+  addRuleButton.addEventListener('click', () => {
+    const row = renderRule({ category: 'New category', keywords: [], order: rulesList.children.length });
+    rulesList.append(row);
+    row.querySelector('.rule-category').select();
+  });
 
   const refreshSession = () => {
     if (refreshPromise) return refreshPromise;

@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import Cookie, FastAPI, File, Form, Header, HTTPException, Response, UploadFile
+from fastapi import Cookie, FastAPI, File, Form, Header, HTTPException, Path, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from google.auth.transport.requests import Request as GoogleRequest
@@ -32,6 +32,7 @@ from urllib import parse, request as url_request
 from urllib.error import HTTPError
 
 from . import processor
+from .rules import DEFAULT_COLLECTION, RulesRepository
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -49,6 +50,12 @@ GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://expensetracker-g
 SESSION_COOKIE = "expense_session"
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(30 * 24 * 60 * 60)))
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "expense_tracker_oauth")
+RULES_COLLECTION = os.getenv("RULES_COLLECTION", DEFAULT_COLLECTION)
+ADMIN_EMAILS = {
+    email.strip().lower()
+    for email in os.getenv("ADMIN_EMAILS", "").split(",")
+    if email.strip()
+}
 TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY")
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 _firestore_client = None
@@ -62,13 +69,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 
 class OAuthCodeRequest(BaseModel):
     code: str
+
+
+class RuleRequest(BaseModel):
+    keywords: list[str]
+    order: int
 
 
 def _get_firestore():
@@ -134,7 +146,7 @@ def _oauth_token_request(values: dict[str, str]) -> dict:
     return payload
 
 
-def _validate_identity(payload: dict) -> str:
+def _validate_identity(payload: dict) -> dict:
     identity_token = payload.get("id_token")
     if not identity_token:
         raise HTTPException(status_code=401, detail="Google identity was not returned")
@@ -145,14 +157,17 @@ def _validate_identity(payload: dict) -> str:
     subject = claims.get("sub")
     if not subject:
         raise HTTPException(status_code=401, detail="Google identity could not be verified")
-    return subject
+    if not claims.get("email") or claims.get("email_verified") is not True:
+        raise HTTPException(status_code=401, detail="Google identity email could not be verified")
+    return claims
 
 
-def _create_session(subject: str) -> str:
+def _create_session(subject: str, email: str) -> str:
     session_id = secrets.token_urlsafe(32)
     _get_firestore().collection(FIRESTORE_COLLECTION).document(f"session:{session_id}").set({
         "type": "session",
         "subject": subject,
+        "email": email.lower(),
         "expires_at": datetime.now(timezone.utc) + timedelta(seconds=SESSION_TTL_SECONDS),
     })
     return session_id
@@ -232,12 +247,15 @@ def login(
     })
     if not set(SCOPES).issubset(set(token_payload.get("scope", "").split())):
         raise HTTPException(status_code=403, detail="Google Sheets access was not granted")
-    subject = _validate_identity(token_payload)
+    claims = _validate_identity(token_payload)
+    subject = claims["sub"]
     _store_google_tokens(subject, token_payload)
-    _set_session_cookie(response, _create_session(subject))
+    session_id = _create_session(subject, claims["email"])
+    _set_session_cookie(response, session_id)
     return {
         "access_token": token_payload["access_token"],
         "expires_in": token_payload.get("expires_in", 3600),
+        "is_admin": claims["email"].lower() in ADMIN_EMAILS,
     }
 
 
@@ -252,6 +270,7 @@ def refresh_access_token(
     return {
         "access_token": token_payload["access_token"],
         "expires_in": token_payload.get("expires_in", 3600),
+        "is_admin": session.get("email", "").lower() in ADMIN_EMAILS,
     }
 
 
@@ -329,6 +348,63 @@ def _google_error_reason(error: HttpError) -> str:
         return error_data.get("error", {}).get("status", "unknown")
     except (AttributeError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
         return "unknown"
+
+
+def _require_admin(session_id: Optional[str]) -> dict:
+    session = _get_session(session_id)
+    if session.get("email", "").lower() not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Category rule administration is not enabled for this account")
+    return session
+
+
+def _rules_repository() -> RulesRepository:
+    return RulesRepository(_get_firestore(), collection_name=RULES_COLLECTION)
+
+
+def _validate_category(category: str) -> str:
+    category = category.strip()
+    if not category or len(category) > 80 or "/" in category:
+        raise HTTPException(status_code=422, detail="Category must be 1-80 characters and cannot contain '/'")
+    return category
+
+
+def _validate_rule_request(request: RuleRequest) -> list[str]:
+    if request.order < 0:
+        raise HTTPException(status_code=422, detail="Rule order must be zero or greater")
+    keywords = []
+    for keyword in request.keywords:
+        if not isinstance(keyword, str) or not keyword.strip() or len(keyword) > 200:
+            raise HTTPException(status_code=422, detail="Keywords must be non-empty strings of 200 characters or fewer")
+        keywords.append(keyword.strip())
+    return keywords
+
+
+@app.get("/rules")
+def list_rules(session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
+    _require_admin(session_id)
+    return {"rules": _rules_repository().list_rules()}
+
+
+@app.put("/rules/{category}")
+def save_rule(
+    request: RuleRequest,
+    category: str = Path(..., min_length=1, max_length=80),
+    session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+):
+    _require_admin(session_id)
+    category = _validate_category(category)
+    keywords = _validate_rule_request(request)
+    _rules_repository().save(category, keywords, request.order)
+    return {"category": category, "keywords": [keyword.lower() for keyword in keywords], "order": request.order}
+
+
+@app.delete("/rules/{category}", status_code=204)
+def delete_rule(
+    category: str = Path(..., min_length=1, max_length=80),
+    session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+):
+    _require_admin(session_id)
+    _rules_repository().delete(_validate_category(category))
 
 
 @app.post("/statements")

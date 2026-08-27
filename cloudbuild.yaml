@@ -4,6 +4,8 @@ substitutions:
   _REPOSITORY: expense-tracker
   _IMAGE: api
   _GOOGLE_CLIENT_ID: replace-with-google-client-id
+  _ADMIN_EMAILS: replace-with-admin-email
+  _RULES_COLLECTION: expense_tracker_rules
   _ALLOWED_ORIGINS: https://replace-with-frontend-origin
   _GOOGLE_REDIRECT_URI: https://expensetracker-git-178545711969.europe-west1.run.app
 
@@ -30,7 +32,7 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
-      - --set-env-vars=GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},ALLOWED_ORIGINS=${_ALLOWED_ORIGINS},GOOGLE_REDIRECT_URI=${_GOOGLE_REDIRECT_URI},COOKIE_SECURE=true
+      - --set-env-vars=GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},ADMIN_EMAILS=${_ADMIN_EMAILS},RULES_COLLECTION=${_RULES_COLLECTION},ALLOWED_ORIGINS=${_ALLOWED_ORIGINS},GOOGLE_REDIRECT_URI=${_GOOGLE_REDIRECT_URI},COOKIE_SECURE=true
       - --set-secrets=GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=expense-token-encryption-key:latest
 
 images:

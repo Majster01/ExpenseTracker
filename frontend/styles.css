@@ -53,5 +53,13 @@ button, .sheet-button { border: 0; border-radius: 5px; font: 600 14px 'DM Sans',
 .sheet-button span:first-child { margin-right: auto; padding-right: 10px; }
 .secondary-button { width: 100%; margin-top: 10px; padding: 11px; color: var(--ink); background: transparent; border: 1px solid var(--line); }
 .secondary-button:hover { background: white; }
+.rules-panel { margin-top: 18px; }
+.compact-button { width: auto; margin: 0; padding: 9px 12px; }
+.rule-row { padding: 16px 0; border-top: 1px solid var(--line); }
+.rule-row-heading { display: flex; gap: 10px; margin-bottom: 12px; }
+.rule-category, .rule-keywords { width: 100%; padding: 11px 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+.rule-keywords { display: block; resize: vertical; line-height: 1.5; }
+.delete-rule { flex: 0 0 auto; padding: 8px 10px; color: var(--coral); background: transparent; border: 1px solid #e8b8a8; border-radius: 5px; font: inherit; cursor: pointer; }
+.save-rule { width: auto; margin-top: 10px; padding: 10px 12px; }
 footer { justify-content: space-between; margin-top: 58px; color: #829ab1; font-size: 11px; }
 @media (max-width: 700px) { .shell { width: min(100% - 28px, 520px); padding-top: 16px; } .topbar { margin-bottom: 62px; } .workspace { grid-template-columns: 1fr; } .result-panel { grid-column: auto; } .panel { padding: 22px; } h1 { font-size: 2.75rem; } footer { margin-top: 38px; gap: 14px; align-items: flex-start; } }

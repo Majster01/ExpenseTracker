@@ -43,6 +43,21 @@ identify the Google subject used to key the Firestore token record. The user's
 Google account must have access to the working spreadsheet. Set
 `MAX_UPLOAD_BYTES` to change the 10 MiB upload limit.
 
+Category rules are stored live in the Firestore collection named by
+`RULES_COLLECTION` (default: `expense_tracker_rules`). Configure
+`ADMIN_EMAILS` as a comma-separated list of Google email addresses allowed to
+manage rules from the website. The rules API is `GET /rules`,
+`PUT /rules/{category}` with `{"keywords":["keyword"],"order":0}`, and
+`DELETE /rules/{category}`; all three require an authenticated allowlisted
+session. Rule order is significant because the first matching category wins.
+
+When the rules collection is empty, the backend seeds it from
+`backend/category_rules.json` in its existing order. If Firestore cannot be
+read, statement processing falls back to that checked-in JSON. The JSON file
+is intentionally retained as the recovery backup; export the current rules
+from `GET /rules` and commit any desired backup changes manually. Runtime code
+does not write to the repository.
+
 `GOOGLE_CLIENT_ID` is required for the statements endpoint. The backend never
 loads service-account credentials or Application Default Credentials; every
 Sheets operation uses the authenticated caller's OAuth access token.

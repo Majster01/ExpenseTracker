@@ -50,6 +50,10 @@ def transaction(
 def load_rules(rules_path: str):
     with open(rules_path, encoding="utf-8") as rules_file:
         rules = json.load(rules_file, object_pairs_hook=OrderedDict)
+    return normalize_rules(rules)
+
+
+def normalize_rules(rules):
     return OrderedDict(
         (category, [keyword.lower() for keyword in keywords])
         for category, keywords in rules.items()

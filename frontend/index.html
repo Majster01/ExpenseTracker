@@ -57,6 +57,15 @@
         <button class="secondary-button" type="button" id="another-button">Upload another statement</button>
       </section>
     </section>
+    <section class="panel rules-panel" id="rules-panel" hidden>
+      <div class="panel-heading">
+        <div><p class="panel-kicker">Administration</p><h2>Category rules</h2></div>
+        <button class="secondary-button compact-button" type="button" id="add-rule-button">Add category</button>
+      </div>
+      <p class="muted">Rules are checked in order. The first matching category wins.</p>
+      <div id="rules-list"></div>
+      <p id="rules-message" class="form-message" role="alert"></p>
+    </section>
     <footer><span>Expense Tracker</span><span>Statements stay in the cloud workflow</span></footer>
   </main>
   <script src="config.js"></script>

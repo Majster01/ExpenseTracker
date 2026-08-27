@@ -7,6 +7,7 @@ from typing import Optional
 from . import parsers
 from .parsers.base import ddmmyy_to_iso
 from .parsers import base as parser_base
+from .rules import RulesRepository
 
 # ---------------------------------------------------------------------------
 # Config
@@ -178,12 +179,12 @@ def process_and_track_statement(
     pdf_bytes: bytes,
     sheets_service,
     rules_path: Optional[Path] = None,
+    rules_repository: Optional[RulesRepository] = None,
 ):
     """Process one statement and update Google Sheets."""
     transactions, statement_id = parse_statement(parser_type, pdf_bytes, rules_path)
 
-    rules_path = rules_path or Path(__file__).resolve().parent / "category_rules.json"
-    rules = parser_base.load_rules(str(rules_path))
+    rules = (rules_repository or RulesRepository(rules_path=rules_path)).get_rules()
     expense_rows = []
     review_rows = []
     credit_count = 0
