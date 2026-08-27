@@ -142,24 +142,6 @@ def add_category_to_named_range(sheets_service, category: str) -> bool:
         body={"values": [[category.strip()]]},
     ).execute()
 
-    if first_empty_row == end_row:
-        expanded_range = dict(grid_range)
-        expanded_range["endRowIndex"] = end_row + 1
-        sheets_service.spreadsheets().batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={
-                "requests": [{
-                    "updateNamedRange": {
-                        "namedRange": {
-                            "namedRangeId": named_range.get("namedRangeId"),
-                            "name": AVAILABLE_CATEGORIES_RANGE,
-                            "range": expanded_range,
-                        },
-                        "fields": "range",
-                    }
-                }],
-            },
-        ).execute()
     return True
 
 
