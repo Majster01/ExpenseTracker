@@ -297,9 +297,12 @@ def refresh_access_token(
         # A returned Response (the TemplateResponse) replaces the injected
         # `response` entirely, so cookies/headers must be set on it directly
         # rather than on `response` -- mutating `response` here would be silently discarded.
+        # No HX-Trigger here: #auth-poller (base.html) listens for `auth-changed`
+        # itself, so announcing it on every routine refresh would re-trigger
+        # this same request forever. The rules panel gets its own `load`
+        # trigger instead (index.html) for the returning-admin case.
         template_response = templates.TemplateResponse(http_request, "partials/topbar.html", {"state": "signed_in"})
         _set_session_cookie(template_response, session_id)
-        template_response.headers["HX-Trigger"] = "auth-changed"
         return template_response
     _set_session_cookie(response, session_id)
     return {

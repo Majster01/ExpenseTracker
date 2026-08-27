@@ -13,7 +13,7 @@
     {% include "partials/result_panel.html" %}
   </section>
   <section class="panel rules-panel" id="rules-panel" hidden
-    hx-get="/rules" hx-trigger="auth-changed from:body" hx-target="#rules-panel-body" hx-swap="innerHTML"
+    hx-get="/rules" hx-trigger="load, auth-changed from:body" hx-target="#rules-panel-body" hx-swap="innerHTML"
     hx-on::after-request="this.hidden = !event.detail.successful">
     <div class="panel-heading">
       <div><p class="panel-kicker">Administration</p><h2>Category rules</h2></div>
