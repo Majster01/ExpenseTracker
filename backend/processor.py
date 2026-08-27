@@ -80,13 +80,14 @@ def add_category_to_named_range(sheets_service, category: str) -> bool:
         sheets_service.spreadsheets()
         .get(
             spreadsheetId=SPREADSHEET_ID,
-            fields="namedRanges,sheets(properties(sheetId,title))",
+            fields="namedRanges(name,namedRangeId,range),sheets(properties(sheetId,title))",
         )
         .execute()
     )
+    named_ranges = metadata.get("namedRanges") or []
     named_range = next(
         (
-            item for item in metadata.get("namedRanges", [])
+            item for item in named_ranges
             if item.get("name") == AVAILABLE_CATEGORIES_RANGE
         ),
         None,
@@ -100,7 +101,7 @@ def add_category_to_named_range(sheets_service, category: str) -> bool:
     start_column = grid_range.get("startColumnIndex", 0)
     end_column = grid_range.get("endColumnIndex")
     sheet_id = grid_range.get("sheetId")
-    if sheet_id is None or end_row is None or end_column != start_column + 1:
+    if sheet_id is None or end_row is None or end_column is None or end_column != start_column + 1:
         raise ValueError("AvailableCategories must be a bounded single-column range.")
 
     sheet = next(

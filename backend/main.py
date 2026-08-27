@@ -383,6 +383,19 @@ def _validate_rule_request(request: RuleRequest) -> list[str]:
     return keywords
 
 
+def _sync_category_to_sheets(sheets_service, category: str) -> None:
+    try:
+        processor.add_category_to_named_range(sheets_service, category)
+    except ValueError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except HttpError as error:
+        log.warning("Category sync failed status_code=%s reason=%s", error.resp.status, _google_error_reason(error))
+        raise HTTPException(status_code=502, detail="Could not update AvailableCategories in Google Sheets") from error
+    except Exception as error:
+        log.exception("Category sync failed unexpectedly category=%s", category)
+        raise HTTPException(status_code=502, detail="Could not update AvailableCategories in Google Sheets") from error
+
+
 @app.get("/rules")
 def list_rules(session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
     _require_admin(session_id)
@@ -405,11 +418,11 @@ def create_category(
         None,
     )
     if existing_category is not None:
-        processor.add_category_to_named_range(sheets_service, existing_category)
+        _sync_category_to_sheets(sheets_service, existing_category)
         return {"category": existing_category, "order": list(rules).index(existing_category), "created": False}
 
     order = len(rules)
-    processor.add_category_to_named_range(sheets_service, category)
+    _sync_category_to_sheets(sheets_service, category)
     repository.save(category, [], order)
     return {"category": category, "order": order, "created": True}
 
