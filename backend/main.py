@@ -83,6 +83,10 @@ class RuleRequest(BaseModel):
     order: int
 
 
+class CategoryRequest(BaseModel):
+    category: str
+
+
 def _get_firestore():
     global _firestore_client
     if _firestore_client is None:
@@ -383,6 +387,31 @@ def _validate_rule_request(request: RuleRequest) -> list[str]:
 def list_rules(session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
     _require_admin(session_id)
     return {"rules": _rules_repository().list_rules()}
+
+
+@app.post("/categories")
+def create_category(
+    request: CategoryRequest,
+    authorization: Optional[str] = Header(default=None),
+    session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE),
+):
+    _require_admin(session_id)
+    category = _validate_category(request.category)
+    sheets_service = _require_google_user(authorization, session_id)
+    repository = _rules_repository()
+    rules = repository.get_rules()
+    existing_category = next(
+        (name for name in rules if name.casefold() == category.casefold()),
+        None,
+    )
+    if existing_category is not None:
+        processor.add_category_to_named_range(sheets_service, existing_category)
+        return {"category": existing_category, "order": list(rules).index(existing_category), "created": False}
+
+    order = len(rules)
+    processor.add_category_to_named_range(sheets_service, category)
+    repository.save(category, [], order)
+    return {"category": category, "order": order, "created": True}
 
 
 @app.put("/rules/{category}")

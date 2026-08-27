@@ -17,6 +17,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SPREADSHEET_ID = "1JlIH41lNNVPEa3WJa9E7mZP5q3yY5YHm52vdJVK2PnI"
 # TODO Change back to "Expenses Override"
 SHEET_NAME = "Expenses Override Test"
+AVAILABLE_CATEGORIES_RANGE = "AvailableCategories"
 NUM_COLUMNS = 6  # Purchase Date, Item, Amount, Category, Needs Review, Meta
 
 WORK_DIR = Path("./output")
@@ -71,6 +72,94 @@ def append_rows(sheets_service, rows: list[list]):
     updated = result.get("updates", {}).get("updatedCells", 0)
     log.info("Wrote %d cells to '%s'.", updated, SHEET_NAME)
     return len(rows)
+
+
+def add_category_to_named_range(sheets_service, category: str) -> bool:
+    """Add a category to the AvailableCategories named range if missing."""
+    metadata = (
+        sheets_service.spreadsheets()
+        .get(
+            spreadsheetId=SPREADSHEET_ID,
+            fields="namedRanges,sheets(properties(sheetId,title))",
+        )
+        .execute()
+    )
+    named_range = next(
+        (
+            item for item in metadata.get("namedRanges", [])
+            if item.get("name") == AVAILABLE_CATEGORIES_RANGE
+        ),
+        None,
+    )
+    if named_range is None:
+        raise ValueError(f"Named range '{AVAILABLE_CATEGORIES_RANGE}' not found.")
+
+    grid_range = named_range.get("range", {})
+    start_row = grid_range.get("startRowIndex", 0)
+    end_row = grid_range.get("endRowIndex")
+    start_column = grid_range.get("startColumnIndex", 0)
+    end_column = grid_range.get("endColumnIndex")
+    sheet_id = grid_range.get("sheetId")
+    if sheet_id is None or end_row is None or end_column != start_column + 1:
+        raise ValueError("AvailableCategories must be a bounded single-column range.")
+
+    sheet = next(
+        (
+            item.get("properties", {}) for item in metadata.get("sheets", [])
+            if item.get("properties", {}).get("sheetId") == sheet_id
+        ),
+        None,
+    )
+    if sheet is None:
+        raise ValueError("AvailableCategories refers to a missing sheet.")
+
+    sheet_title = sheet.get("title", "").replace("'", "''")
+    column_name = chr(65 + start_column)
+    values = (
+        sheets_service.spreadsheets()
+        .values()
+        .get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"'{sheet_title}'!{column_name}{start_row + 1}:{column_name}{end_row}",
+        )
+        .execute()
+        .get("values", [])
+    )
+    normalized_category = category.strip().casefold()
+    for row in values:
+        if row and isinstance(row[0], str) and row[0].strip().casefold() == normalized_category:
+            return False
+
+    first_empty_row = next(
+        (start_row + offset for offset, row in enumerate(values) if not row or not str(row[0]).strip()),
+        end_row,
+    )
+    sheets_service.spreadsheets().values().update(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"'{sheet_title}'!{column_name}{first_empty_row + 1}",
+        valueInputOption="USER_ENTERED",
+        body={"values": [[category.strip()]]},
+    ).execute()
+
+    if first_empty_row == end_row:
+        expanded_range = dict(grid_range)
+        expanded_range["endRowIndex"] = end_row + 1
+        sheets_service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={
+                "requests": [{
+                    "updateNamedRange": {
+                        "namedRange": {
+                            "namedRangeId": named_range.get("namedRangeId"),
+                            "name": AVAILABLE_CATEGORIES_RANGE,
+                            "range": expanded_range,
+                        },
+                        "fields": "range",
+                    }
+                }],
+            },
+        ).execute()
+    return True
 
 
 def deduplicate_rows(sheets_service):
