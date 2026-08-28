@@ -54,7 +54,7 @@ SHEET_URL = os.getenv(
     "SHEET_URL",
     "https://docs.google.com/spreadsheets/d/1JlIH41lNNVPEa3WJa9E7mZP5q3yY5YHm52vdJVK2PnI/edit?gid=1091925467#gid=1091925467",
 )
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://expensetracker-git-178545711969.europe-west1.run.app")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://bankparse.dev")
 SESSION_COOKIE = "expense_session"
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", str(30 * 24 * 60 * 60)))
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "expense_tracker_oauth")
@@ -69,7 +69,7 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 _firestore_client = None
 ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8000,https://expensetracker-git-178545711969.europe-west1.run.app").split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,https://bankparse.dev").split(",")
     if origin.strip()
 ]
 
@@ -461,7 +461,7 @@ def list_rules(
     except HTTPException:
         return RedirectResponse("/", status_code=303)
     rules = _rules_repository().list_rules()
-    return templates.TemplateResponse(request, "rules.html", {"rules": rules, "is_admin": True})
+    return templates.TemplateResponse(request, "rules.html", {"rules": rules, "is_admin": True, "state": "signed_in"})
 
 
 @app.post("/categories")
@@ -658,13 +658,18 @@ def index(request: Request, session_id: Optional[str] = Cookie(default=None, ali
             "rules": [],
             "message": "",
             "is_admin": _is_admin(session_id),
+            "state": "signed_in" if session_id else None,
         },
     )
 
 
 @app.get("/review")
 def review(request: Request, session_id: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE)):
-    return templates.TemplateResponse(request, "review.html", {"is_admin": _is_admin(session_id)})
+    return templates.TemplateResponse(
+        request,
+        "review.html",
+        {"is_admin": _is_admin(session_id), "state": "signed_in" if session_id else None},
+    )
 
 
 @app.get("/settings")
@@ -673,7 +678,7 @@ def settings_page(request: Request, session_id: Optional[str] = Cookie(default=N
         _require_admin(session_id)
     except HTTPException:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "settings.html", {"is_admin": True})
+    return templates.TemplateResponse(request, "settings.html", {"is_admin": True, "state": "signed_in"})
 
 
 @app.get("/statements/new")
